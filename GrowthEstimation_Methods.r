@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.2 ####
+#### GrowthEstimation v0.2.1 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -9,7 +9,7 @@
 
 GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
                          category="BodyShape", LowP=0.8, UpP=1.2, LQ=0, UQ=1){
-  # Documentation v0.2
+  # Documentation v0.2.1
   #' @title Calculates priors for the von Bertalanffy growth parameters
   # Linf and k using the growth performance index and maximum size Lmax
   #' @description
@@ -45,7 +45,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   AllSpeciesDF$Exclude <- match(AllSpeciesDF$DemersPelag, c(Habit))
   HABITAT <- subset(AllSpeciesDF, is.na(Exclude)=="FALSE")
   
-
+  
   # SIMILAR BODY SHAPE:
   # can be: #levels(as.factor(AllSpeciesDF$BodyShapeI))
   # "eel-like", "elongated", "Elongated", "fusiform / normal", "other",
@@ -143,7 +143,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   LowK <- 10^(LowPhi-2*log10(Linf)) 
   UpK <- 10^(UpPhi-2*log10(Linf)) 
   
-
+  
   ### Output
   df <- data.frame('species' = species, 
                    'category'=category,
@@ -283,39 +283,124 @@ Bla02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
 #///////////////////////////////////////////////////////////////////////////////
 
 
-Bfa65 <- function(par,L1,L2,T1,T2,priordist='uniform',hyperpar=NULL,
+Bfa65 <- function(par,L1,L2,T1,T2,
+                  priordist.Linf='uniform',
+                  priordist.K='uniform',
+                  priordist.sigma='uniform',
+                  hyperpar=NULL,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
                   mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
+  
+  ### setup priors
+  
+  priordist.code <- integer(3) # codes for Linf, K, and sigma
+  
+  # prior for Linf
+  
+  if (priordist.Linf=='uniform'){
+    priordist.code[1] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="uniform" the 1st one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.Linf=='normal' | priordist.Linf=='Gaussian'){
+    priordist.code[1] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="normal" the 1st one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.Linf=='lognormal'){
+    priordist.code[1] <- 3L
+    hyperpar[[1]] <- c(2*log(hyperpar[[1]][1]) +
+                         - log(hyperpar[[1]][2]^2+hyperpar[[1]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[1]][1]) +
+                              + log(hyperpar[[1]][2]^2+hyperpar[[1]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="lognormal" the 1st one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[1] <- 0L
+  }
+  
+  # prior for K
+  
+  if (priordist.K=='uniform'){
+    priordist.code[2] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="uniform" the 2nd one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.K=='normal' | priordist.K=='Gaussian'){
+    priordist.code[2] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="normal" the 2nd one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.K=='lognormal'){
+    priordist.code[2] <- 3L
+    hyperpar[[2]] <- c(2*log(hyperpar[[2]][1]) +
+                         - log(hyperpar[[2]][2]^2+hyperpar[[2]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[2]][1]) +
+                              + log(hyperpar[[2]][2]^2+hyperpar[[2]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="lognormal" the 2nd one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[2] <- 0L
+  }
+  
+  # prior for sigma
+  
+  if (priordist.sigma=='uniform'){
+    priordist.code[3] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="uniform" the 3rd one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.sigma=='normal' | priordist.sigma=='Gaussian'){
+    priordist.code[3] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="normal" the 3rd one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.sigma=='lognormal'){
+    priordist.code[3] <- 3L
+    hyperpar[[3]] <- c(2*log(hyperpar[[3]][1]) +
+                         - log(hyperpar[[3]][2]^2+hyperpar[[3]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[3]][1]) +
+                              + log(hyperpar[[3]][2]^2+hyperpar[[3]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="lognormal" the 3rd one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[3] <- 0L
+  }
+  
+  if (any(priordist.code==0L) & !all(priordist.code==0L)){
+    warning('At least one prior distribution specified, but not for all three ',
+            'Linf, K, and sigma, so reverting to TMB estimation only and no MCMC.')
+  }
   
   ### setup
   if (meth!='nlminb'){warning('Only meth="nlminb" supported for now.')}
   # if (!compute.se){warning('se will be computed anyway.')}
   
-  if (priordist=='uniform'){
-    priordist.code <- 1L
-    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
-      stop('For priordist=="uniform", hyperpar must be supplied as a list ',
-           'with 3 elements (Linf, K, sigma), each being a vector of length 2 ',
-           'of lower and upper bound.')
-    }
-  } else if (priordist=='normal' | priordist=='Gaussian'){
-    priordist.code <- 2L
-    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
-      stop('For priordist=="normal", hyperpar must be supplied as a list ',
-           'with 3 elements (Linf, K, sigma), each being a vector of length 2 ',
-           'of mean and sd.')
-    }
-  } else if (priordist=='lognormal'){
-    priordist.code <- 3L
-    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
-      stop('For priordist=="lognormal", hyperpar must be supplied as a list ',
-           'with 3 elements (Linf, K, sigma), each being a vector of length 2 ',
-           'of mean and sd on the log scale.')
-    }
-  } else { # then no prior specified, straight frequentist Fabens, no MCMC
-    priordist.code <- 0L
-  }
   
   # n <- length(L1)
   
@@ -323,7 +408,7 @@ Bfa65 <- function(par,L1,L2,T1,T2,priordist='uniform',hyperpar=NULL,
                    'hp_Linf'=hyperpar[[1]], # user-supplied
                    'hp_K'=hyperpar[[2]], # user-supplied
                    'hp_sigma'=hyperpar[[3]], # user-supplied
-                   'priordist'=priordist.code) # 0 = disabled, 1 = enabled
+                   'priordist'=priordist.code) # as of v0.2.1 vector dim 3
   parlist <- list('logLinf'=log(par[1]),
                   'logK'=log(par[2]),
                   'logsigma'=0)
@@ -336,7 +421,7 @@ Bfa65 <- function(par,L1,L2,T1,T2,priordist='uniform',hyperpar=NULL,
   theta.tmb <- exp(opt$par[1:2]) # naive estimates without sdreport()
   
   ### MCMC based on NUTS
-  if (!onlyTMB & priordist.code!=0){
+  if (!onlyTMB & all(priordist.code!=0)){
     nchains <- mcmc.control$nchains
     rad.unif <- 0.2 # random ini from Unif[-rad.unif,+rad.unif]
     initlist <- vector('list',nchains)
@@ -363,7 +448,7 @@ Bfa65 <- function(par,L1,L2,T1,T2,priordist='uniform',hyperpar=NULL,
   
   ### optional: compute standard errors
   if (compute.se){
-    if (!onlyTMB & priordist.code!=0){
+    if (!onlyTMB & all(priordist.code!=0)){
       res$se <- c(sqrt(var(mcmc.Linf)/length(mcmc.Linf)),
                   sqrt(var(mcmc.K)/length(mcmc.K))) # posterior naive se
       names(res$se) <- c('Linf','K')
@@ -382,15 +467,15 @@ Bfa65 <- function(par,L1,L2,T1,T2,priordist='uniform',hyperpar=NULL,
   
   ### output
   if (output.post.draws){
-    if (onlyTMB | priordist.code==0){
-      warning('No posterior draws if onlyTMB=TRUE or priordist.code=0.')
+    if (onlyTMB | any(priordist.code==0)){
+      warning('No posterior draws if onlyTMB=TRUE or not all priordist set.')
     } else {
       # res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
       res$post.draws <- as.list(mcmc.post)
     }
   }
   
-  if (!onlyTMB & priordist.code!=0){
+  if (!onlyTMB & all(priordist.code!=0)){
     res$cred.int <- list('Linf'=quantile(mcmc.Linf,probs=c(0.025,0.975)),
                          'K'=quantile(mcmc.K,probs=c(0.025,0.975)))
     # ^ equal-tailed 95% credible intervals based on MCMC draws

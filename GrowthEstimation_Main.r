@@ -1,6 +1,6 @@
-#////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data ####
-#////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////
+#### GrowthEstimation: compare methods on simulated data v0.2.1 ####
+#///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
 
@@ -120,7 +120,10 @@ system.time(est[[6]] <- zh09(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap,
                              mcmc.control=mcmc.control))
 # ^ even slower because of random effects and MCMC
 system.time(est[[7]] <- Bfa65(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap,
-                              priordist='uniform',hyperpar=c(hp.unif,list(c(0,100))),
+                              priordist.Linf='uniform',
+                              priordist.K='uniform',
+                              priordist.sigma='uniform',
+                              hyperpar=c(hp.unif,list(c(0,100))),
                               mcmc.control=mcmc.control))
 # ^ somewhat slow because of MCMC, but no random effects
 system.time(est[[8]] <- Bla02(par=par.ini,L1=L1,L2=L2,

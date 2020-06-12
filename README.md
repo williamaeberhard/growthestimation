@@ -14,7 +14,10 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.2. This is the initial release.
+This is GrowthEstimation version 0.2.1. Changelog since previous version:
+* In Bfa65: now allow for different families for priors on Linf, K, and sigma.
+* In Bfa65: for priordist="lognormal", user now provides mean and sd on original (exponential) scale, easier for interpretation.
+
 
 ### References
 

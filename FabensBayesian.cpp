@@ -1,4 +1,4 @@
-// Bayesian formulation of Fabens (1965) | v0.2
+// Bayesian formulation of Fabens (1965) | v0.2.1
 // Gaussian likelihood assumed (original Fabens only based on moments)
 // priors: Linf (uniform), K (uniform), sigma^2 (uniform)
 // model length at recap L2, given observed T1, T2 and L1
@@ -46,7 +46,8 @@ Type objective_function<Type>::operator() () {
 	//    - priordist=3: mean and sd of Gaussian density on log scale (lognormal)
 
 	// Misc
-	DATA_INTEGER(priordist);
+	// DATA_INTEGER(priordist);
+	DATA_IVECTOR(priordist); // code for (Linf,K,sigma), dim 3
 	// ^ 0 = no prior, 1 = uniform, 2 = Gaussian, 3 = lognormal
 
 
@@ -67,20 +68,32 @@ Type objective_function<Type>::operator() () {
 	// Priors
 	//--------------------------------------------------------------------------
 
-	if (priordist==1){ // uniform prior on Linf, K, and sigma
+	if (priordist(0)==1){ // uniform prior on Linf
 		nll += neglogdunif(Linf, hp_Linf(0), hp_Linf(1), n);
-		nll += neglogdunif(K, hp_K(0), hp_K(1), n);
-		nll += neglogdunif(sigma, hp_sigma(0), hp_sigma(1), n);
-	} else if (priordist==2){ // Gaussian prior on Linf, K, and sigma
+	} else if (priordist(0)==2){ // Gaussian prior on Linf
 		nll -= dnorm(Linf, hp_Linf(0), hp_Linf(1), true);
-		nll -= dnorm(K, hp_K(0), hp_K(1), true);
-		nll -= dnorm(sigma, hp_sigma(0), hp_sigma(1), true);
-	} else if (priordist==3){ // lognormal prior on Linf, K, and sigma
+	} else if (priordist(0)==3){ // lognormal prior on Linf
 		nll -= dnorm(logLinf, hp_Linf(0), hp_Linf(1), true) - logLinf;
+		// ^ lognormal log-pdf evaluated at param on exp scale
+	} // else no prior on Linf
+
+	if (priordist(1)==1){ // uniform prior on K
+		nll += neglogdunif(K, hp_K(0), hp_K(1), n);
+	} else if (priordist(1)==2){ // Gaussian prior on K
+		nll -= dnorm(K, hp_K(0), hp_K(1), true);
+	} else if (priordist(1)==3){ // lognormal prior on K
 		nll -= dnorm(logK, hp_K(0), hp_K(1), true) - logK;
+		// ^ lognormal log-pdf evaluated at param on exp scale
+	} // else no prior on K
+
+	if (priordist(2)==1){ // uniform prior on sigma
+		nll += neglogdunif(sigma, hp_sigma(0), hp_sigma(1), n);
+	} else if (priordist(2)==2){ // Gaussian prior on sigma
+		nll -= dnorm(sigma, hp_sigma(0), hp_sigma(1), true);
+	} else if (priordist(2)==3){ // lognormal prior on sigma
 		nll -= dnorm(logsigma, hp_sigma(0), hp_sigma(1), true) - logsigma;
 		// ^ lognormal log-pdf evaluated at param on exp scale
-	} // else no prior
+	} // else no prior on sigma
 
 
 	//--------------------------------------------------------------------------
