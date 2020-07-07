@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data v0.2.1 ####
+#### GrowthEstimation: compare methods on simulated data v0.2.2 ####
 #///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
@@ -172,6 +172,62 @@ arrows(x0=1:n.est,x1=1:n.est,angle=90,code=3,length=0.1,
 abline(h=trueK,col='red')
 par(mfrow=c(1,1))
 
+
+#////////////////////////////////////////////////////////////////////////////
+#### GrowthEstimation: test compare two population in terms of vB curves ####
+#////////////////////////////////////////////////////////////////////////////
+
+# rm(list=ls())
+
+### setup
+require(TMB) # needed for zh09, la02, Bfa65 and Bla02
+
+compile("FabensTwoPop.cpp") # only need to run once
+dyn.load(dynlib("FabensTwoPop")) # to run for every new R session
+
+source('GrowthEstimation_Tests.r')
+
+
+### sim data under exact Fabens formulation, but different pop1/pop2
+n <- 100 # total sample size, nb of capture-recapture pairs
+n1 <- 50 # sample size pop1
+n2 <- n-n1 # sample size pop2
+
+trueLinf1 <- 125 # close to starry smooth-hound Mustelus asterias
+trueK1 <- 0.145 # close to starry smooth-hound Mustelus asterias
+trueLinf2 <- 120 # pop2, slightly smaller than that of pop1
+trueK2 <- 0.145 # pop2, same as pop1
+
+sigmaeps1 <- 2 # errror sd, pop1
+sigmaeps2 <- 2 # errror sd, pop2
+
+par.ini <- c(100,0.2) # initial values for Linf and K, somewhat in ballpark
+
+set.seed(1234) # for replicability
+
+Lcap1 <- rnorm(n=n1,mean=60,sd=5) # pop1
+Lcap2 <- rnorm(n=n2,mean=60,sd=5) # pop2
+
+deltaT1 <- rgamma(n=n1,shape=1,scale=1) # in years
+deltaT1 <- ifelse(deltaT1>3,3,deltaT1) # truncate at 3
+deltaT2 <- rgamma(n=n2,shape=1,scale=1) # in years
+deltaT2 <- ifelse(deltaT2>3,3,deltaT2) # truncate at 3
+
+eps1 <- rnorm(n=n1,mean=0,sd=sigmaeps1) # pop1
+eps2 <- rnorm(n=n2,mean=0,sd=sigmaeps2) # pop2
+
+Lrecap1 <- trueLinf1 - (trueLinf1-Lcap1)*exp(-trueK1*deltaT1) + eps1 # pop 1
+Lrecap2 <- trueLinf2 - (trueLinf2-Lcap2)*exp(-trueK2*deltaT2) + eps2 # pop 2
+# ^ both follow the vB curve with some iid Gaussian error on lengths at recap
+
+
+### compute likelihood ratio test (LRT) to compare the two pop
+LRT_2pop_fa65(par=par.ini,alpha=0.05,
+  L1.pop1=Lcap1,L2.pop1=Lrecap1,T1.pop1=rep(0,n1),T2.pop1=deltaT1,
+  L1.pop2=Lcap2,L2.pop2=Lrecap2,T1.pop2=rep(0,n2),T2.pop2=deltaT2)
+# ^ test stat > chi^2 critical value or equivalently p-value < alpha
+#   => reject H0 at significance level alpha=0.05, the pair (Linf,K) differs
+#      between the two pop
 
 
 
