@@ -71,19 +71,20 @@ par.ini <- c(100,0.3) # initial values for Linf and K, somewhat in ballpark
 set.seed(1234) # for replicability
 dat <- CapRecapSim(n=n,trueLinf=trueLinf,trueK=trueK,sizedist='norm')
 
-str(dat) # what really matters is the "realistic" data: Lcap, Lrecap, Tcap and Trecap
-# All dates are in years (numeric), with year 0 being "1970-01-01", R's default
+str(dat)
+# ^ what really matters is the "realistic" data: Lcap, Lrecap, Tcap and Trecap
+# All ages are in years, so that K/Ki expressed in year^{-1}
 
 ### for a given method, say fa65, study impact of gv and measurement error
 cbind(c(trueLinf,trueK),
       fa65(par=par.ini,L1=dat$trueLcap,L2=dat$trueLrecap, # no gv, no meas err
-           T1=dat$Tcap,T2=dat$Trecap,compute.se=T)$par,
+           deltaT=dat$truedeltaT,compute.se=F)$par,
       fa65(par=par.ini,L1=dat$gvLcap,L2=dat$gvLrecap, # gv, no meas err
-           T1=dat$Tcap,T2=dat$Trecap,compute.se=T)$par,
+           deltaT=dat$deltaT,compute.se=F)$par,
       fa65(par=par.ini,L1=dat$eLcap,L2=dat$eLrecap, # no gv, meas err
-           T1=dat$Tcap,T2=dat$Trecap,compute.se=T)$par,
+           deltaT=dat$truedeltaT,compute.se=F)$par,
       fa65(par=par.ini,L1=dat$Lcap,L2=dat$Lrecap, # both gv and meas err
-           T1=dat$Tcap,T2=dat$Trecap,compute.se=T)$par
+           deltaT=dat$deltaT,compute.se=F)$par
 )
 # 1st col = true values, 2nd col = est under no gv and no meas err, etc.
 
@@ -98,36 +99,44 @@ hp.unif <- list(c(0,500),c(0,2)) # hyperparam: lb and ub for Linf and K
 mcmc.control <- list('nchains'=1,'iter'=1000,'warmup'=200)
 # ^ all should be larger, just for the sake of the demo here
 
-# L1 <- dat$trueLcap # pure vB, no gv or meas err
-# L2 <- dat$trueLrecap # pure vB, no gv or meas err
-# L1 <- dat$gvLcap # gv, but no meas err
-# L2 <- dat$gvLrecap # gv, but no meas err
-L1 <- dat$eLcap # no gv, but meas err
-L2 <- dat$eLrecap # no gv, but meas err
-# L1 <- dat$Lcap # with both gv and meas err
-# L2 <- dat$Lrecap # with both gv and meas err
+# ## pure vB, no gv or meas err
+# L1 <- dat$trueLcap
+# L2 <- dat$trueLrecap
+# deltaT <- dat$truedeltaT
+## gv, but no meas err
+L1 <- dat$gvLcap
+L2 <- dat$gvLrecap
+deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
+# ## no gv, but meas err
+# L1 <- dat$eLcap
+# L2 <- dat$eLrecap
+# deltaT <- dat$truedeltaT # with only meas err on lengths, ages remain the same
+# ##  with both gv and meas err
+# L1 <- dat$Lcap
+# L2 <- dat$Lrecap
+# deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
+
 # ^ compare all methods on different sets of data
 
-system.time(est[[1]] <- gh59(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap))
-system.time(est[[2]] <- fa65(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap))
-system.time(est[[3]] <- fr88(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap))
-system.time(est[[4]] <- ja91(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap))
-system.time(est[[5]] <- la02(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap,
+system.time(est[[1]] <- gh59(par=par.ini,L1=L1,L2=L2,deltaT=deltaT))
+system.time(est[[2]] <- fa65(par=par.ini,L1=L1,L2=L2,deltaT=deltaT))
+system.time(est[[3]] <- fr88(par=par.ini,L1=L1,L2=L2,deltaT=deltaT))
+system.time(est[[4]] <- ja91(par=par.ini,L1=L1,L2=L2,deltaT=deltaT))
+system.time(est[[5]] <- la02(par=par.ini,L1=L1,L2=L2,deltaT=deltaT,
                              lb.sd=1e-5)) # necessary for se with pure vB data
 # ^ slower because of random effects
-system.time(est[[6]] <- zh09(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap,
+system.time(est[[6]] <- zh09(par=par.ini,L1=L1,L2=L2,deltaT=deltaT,
                              hyperpar=hp.unif,lb.sd=1e-5,
                              mcmc.control=mcmc.control))
 # ^ even slower because of random effects and MCMC
-system.time(est[[7]] <- Bfa65(par=par.ini,L1=L1,L2=L2,T1=dat$Tcap,T2=dat$Trecap,
+system.time(est[[7]] <- Bfa65(par=par.ini,L1=L1,L2=L2,deltaT=deltaT,
                               priordist.Linf='uniform',
                               priordist.K='uniform',
                               priordist.sigma='uniform',
                               hyperpar=c(hp.unif,list(c(0,100))),
                               mcmc.control=mcmc.control))
 # ^ somewhat slow because of MCMC, but no random effects
-system.time(est[[8]] <- Bla02(par=par.ini,L1=L1,L2=L2,
-                              T1=dat$Tcap,T2=dat$Trecap,
+system.time(est[[8]] <- Bla02(par=par.ini,L1=L1,L2=L2,deltaT=deltaT,
                               hyperpar=hp.unif,lb.sd=1e-5,
                               mcmc.control=mcmc.control))
 # ^ also slow because of random effects and MCMC

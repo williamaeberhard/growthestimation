@@ -165,7 +165,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
 #### Bla02: Bayesian Laslett, Eveson and Polacheck (2002) ####
 #///////////////////////////////////////////////////////////////////////////////
 
-Bla02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
+Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                   output.post.draws=F,lb.sd=NULL,
                   mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
   # uniform priors with user-supplied hyperparam
@@ -188,7 +188,9 @@ Bla02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
                   'logLinf'=rep(log(par[1]),n),
                   'logA'=rep(1,n))
   length.theta <- 6
-  datalist <- list('L1'=L1,'L2'=L2,'T1'=T1,'T2'=T2,
+  datalist <- list('L1'=L1,'L2'=L2,
+                   # 'T1'=T1,'T2'=T2,
+                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
                    'lbubmuinf'=hyperpar[[1]], # user-supplied
                    'lbubK'=hyperpar[[2]], # user-supplied
                    'lbubsigmainf'=c(1e-10,1e4),
@@ -283,7 +285,7 @@ Bla02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
 #///////////////////////////////////////////////////////////////////////////////
 
 
-Bfa65 <- function(par,L1,L2,T1,T2,
+Bfa65 <- function(par,L1,L2,deltaT,
                   priordist.Linf='uniform',
                   priordist.K='uniform',
                   priordist.sigma='uniform',
@@ -404,7 +406,9 @@ Bfa65 <- function(par,L1,L2,T1,T2,
   
   # n <- length(L1)
   
-  datalist <- list('L1'=L1,'L2'=L2,'T1'=T1,'T2'=T2,
+  datalist <- list('L1'=L1,'L2'=L2,
+                   # 'T1'=T1,'T2'=T2,
+                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
                    'hp_Linf'=hyperpar[[1]], # user-supplied
                    'hp_K'=hyperpar[[2]], # user-supplied
                    'hp_sigma'=hyperpar[[3]], # user-supplied
@@ -502,7 +506,7 @@ Bfa65 <- function(par,L1,L2,T1,T2,
 # * No noticeable impact of original priors, all fairly flat, but necessary to
 #   help numerical stability in estimation (rather than box constraints).
 
-zh09 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
+zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                  rand.ini=list(perform=F,'n'=10,'radius'=0.1),
                  onlyTMB=F,output.post.draws=F,lb.sd=NULL,enablepriors=1,
                  mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
@@ -521,7 +525,9 @@ zh09 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
   length.theta <- 7
   n <- length(L1)
   rad <- rand.ini$radius
-  datalist <- list('L1'=L1,'L2'=L2,'T1'=T1,'T2'=T2,
+  datalist <- list('L1'=L1,'L2'=L2,
+                   # 'T1'=T1,'T2'=T2,
+                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
                    'lbubmuinf'=hyperpar[[1]], # user-supplied
                    'lbubK'=hyperpar[[2]], # user-supplied
                    'lbubgammashapeA'=c(1e-3,1000),
@@ -685,7 +691,7 @@ zh09 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',compute.se=T,
 # * Already with n=100 all estimates seem symmetric.
 # * Naive CIs on original scale cover too much.
 
-la02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',
+la02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',
                  compute.se=T,enable.priors=F,lb.sd=NULL){
   # uniform priors with user-supplied hyperparam
   # hyperpar=list(lbubmuinf,lbubK) for consistency across methods, while bounds
@@ -711,7 +717,9 @@ la02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',
                   'logLinf'=rep(log(par[1]),n),
                   'logA'=rep(1,n))
   length.theta <- 6
-  datalist <- list('L1'=L1,'L2'=L2,'T1'=T1,'T2'=T2,
+  datalist <- list('L1'=L1,'L2'=L2,
+                   # 'T1'=T1,'T2'=T2,
+                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
                    'lbubmuinf'=hyperpar[[1]], # user-supplied
                    'lbubK'=hyperpar[[2]], # user-supplied
                    'lbubsigmainf'=c(1e-10,1e4),
@@ -773,7 +781,7 @@ la02 <- function(par,L1,L2,T1,T2,hyperpar=NULL,meth='nlminb',
 #   right-skewed and overestimated s.e. of Linf but dramatically underestimated
 #   s.e. of K, even with large n. 
 
-ja91 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
+ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function
   rss <- function(par,L1,L2,deltaT){
     Linf <- par[1]
@@ -794,7 +802,7 @@ ja91 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
     return(-2*c(psi1,psi2))
   }
   ### setup
-  deltaT <- as.numeric(T2-T1)
+  # deltaT <- as.numeric(T2-T1) # asof v0.3: directly supply deltaT
   ### optimization
   if (meth=='nlminb'){
     opt <- nlminb(start=par,objective=rss,gradient=gr.rss,
@@ -812,7 +820,7 @@ ja91 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
     Linf <- opt$par[1] # plug-in estimated values
     K <- opt$par[2] # plug-in estimated values
     expKdt <- exp(-K*deltaT)
-    exp2Kdt <- expKdt^2 #  exp(-2*K*deltaT)
+    exp2Kdt <- expKdt^2 # exp(-2*K*deltaT)
     wi <- 1+exp2Kdt # weight in James' WLS
     # estimate residual variance under James' model (corrected WLS)
     y <- L2-L1 # deltaL
@@ -853,7 +861,7 @@ ja91 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
 #   numerical Hessian and delta method for (Linf,K). Since estimates not
 #   consistent, delta method is probably returning garbage.
 
-fr88 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T,tol.sd=1e-4){
+fr88 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T,tol.sd=1e-4){
   # par argument not necessary, but for consistency with other methods
   ### objective function
   nll <- function(par,alpha,beta,deltaT,L1,L2,tol.sd){ # par=c(ga,gb,nu)
@@ -870,7 +878,7 @@ fr88 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T,tol.sd=1e-4){
   alpha <- as.numeric(quantile(L1,0.1))
   beta <- as.numeric(quantile(L1,0.9))
   deltaL <- as.numeric(L2-L1)
-  deltaT <- as.numeric(T2-T1)
+  # deltaT <- as.numeric(T2-T1) # as of v0.3: directly supply deltaT
   ### starting values, from fishmethods::grotag
   subs.a <- which(L1>(0.8*alpha) & L1<(1.2*alpha) & deltaT>median(deltaT))
   if (length(subs.a)==0){ # empty subset
@@ -945,7 +953,7 @@ fr88 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T,tol.sd=1e-4){
 # * Linf and K seem to converge at about same speed (bias and as. norm.)
 # * n=500 is already good enough for getting variances in right ballpark.
 
-fa65 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
+fa65 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function and gradient wrt (Linf,K)
   rss <- function(par,L1,L2,deltaT){
     Linf <- par[1]
@@ -966,7 +974,7 @@ fa65 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
     return(gr)
   }
   ### setup
-  deltaT <- as.numeric(T2-T1)
+  # deltaT <- as.numeric(T2-T1) # as of v0.3: directly supply deltaT
   ### optimization
   if (meth=='nlminb'){
     opt <- nlminb(start=par,objective=rss,gradient=gr.rss,L1=L1,L2=L2,deltaT=deltaT)
@@ -1015,7 +1023,7 @@ fa65 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
 #   variance of Linf (let alone MSE with non-zero bias)
 # * Related: estimated Linf is quite positively skewed unless n very large.
 
-gh59 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
+gh59 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function and gradient wrt (Linf,K)
   rss <- function(par,L1,L2,deltaT){
     Linf <- par[1]
@@ -1037,7 +1045,7 @@ gh59 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
     return(gr)
   }
   ### setup
-  deltaT <- as.numeric(T2-T1)
+  # deltaT <- as.numeric(T2-T1) # as of v0.3: directly supply deltaT
   ### optimization
   if (meth=='nlminb'){
     opt <- nlminb(start=par,objective=rss,gradient=gr.rss,L1=L1,L2=L2,deltaT=deltaT)
@@ -1053,7 +1061,8 @@ gh59 <- function(par,L1,L2,T1,T2,meth='nlminb',compute.se=T){
     Linf <- opt$par[1] # plug-in estimated values
     K <- opt$par[2] # plug-in estimated values
     # estimate residual variance under G&H's linear model
-    y <- (L2-L1)/(T2-T1) # response in G&H
+    # y <- (L2-L1)/(T2-T1) # response in G&H
+    y <- (L2-L1)/deltaT # response in G&H
     x <- (L2+L1)/2 # fixed covariate in G&H
     sigma2 <- sum((y-K*Linf+K*x)^2)/(n-2) # residual sum of squares
     # compute M=Q

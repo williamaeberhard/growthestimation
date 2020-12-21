@@ -33,8 +33,10 @@ Type objective_function<Type>::operator() () {
 	// Data
 	DATA_VECTOR(L1); // lengths at cap, dim n
 	DATA_VECTOR(L2); // lengths at recap, dim n
-	DATA_VECTOR(T1); // time at cap, dim n
-	DATA_VECTOR(T2); // time at recap, dim n
+	// DATA_VECTOR(T1); // time at cap, dim n
+	// DATA_VECTOR(T2); // time at recap, dim n
+	DATA_VECTOR(deltaT); // time diff betwee cap and recap, dim n
+	// ^ as of v0.3: directly supply deltaT
 
 	// Fixed parameters
 	PARAMETER(logmuinf); // Gaussian mean von Bert Linf
@@ -119,8 +121,10 @@ Type objective_function<Type>::operator() () {
 	for (int i = 0; i < n; i++){
 		Type lT1 = Linf(i)*(Type(1.0)-exp(-K(i)*A(i))); // vB at T1
 		nll -= dnorm(L1(i), lT1, sigmaeps, true);
-		Type lT2 = Linf(i)*(Type(1.0)-exp(-K(i)*(A(i)+T2(i)-T1(i)))); // vB T2
+		// Type lT2 = Linf(i)*(Type(1.0)-exp(-K(i)*(A(i)+T2(i)-T1(i)))); // vB T2
+		Type lT2 = Linf(i)*(Type(1.0)-exp(-K(i)*(A(i)+deltaT(i)))); // vB T2
 		nll -= dnorm(L2(i), lT2, sigmaeps, true);
+		// ^ vB reference point = T0
 	}
 
 	//--------------------------------------------------------------------------

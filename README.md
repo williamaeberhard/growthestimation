@@ -17,6 +17,7 @@ Files contained in this repository:
 ### Version History
 
 This is GrowthEstimation version 0.3. Changelog since last version:
+* for all estimation methods: now supply deltaT directly rather than T1 and T2 (they were never used individually anyway).
 * CapRecapSim:
   - changed default value of sd.L from 0.3 to 0.2, better if simulated lengths at capture are slightly more concentrated
   - deleted output Tcap and Trecap, no use considering dates if true ages are expressed wrt birth = 0.

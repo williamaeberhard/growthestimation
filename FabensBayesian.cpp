@@ -25,8 +25,10 @@ Type objective_function<Type>::operator() () {
 	// Data
 	DATA_VECTOR(L1); // lengths at cap, dim n
 	DATA_VECTOR(L2); // lengths at recap, dim n
-	DATA_VECTOR(T1); // time at cap, dim n
-	DATA_VECTOR(T2); // time at recap, dim n
+	// DATA_VECTOR(T1); // time at cap, dim n
+	// DATA_VECTOR(T2); // time at recap, dim n
+	DATA_VECTOR(deltaT); // time diff betwee cap and recap, dim n
+	// ^ as of v0.3: directly supply deltaT
 
 	// Parameters
 	PARAMETER(logLinf); // vB Linf
@@ -108,9 +110,11 @@ Type objective_function<Type>::operator() () {
 	//--------------------------------------------------------------------------
 
 	for (int i = 0; i < n; i++){
-		Type deltaT = T2(i)-T1(i); // time increment between cap and recap
-		Type meanL2 = Linf-(Linf-L1(i))*exp(-K*deltaT); // vB growth eq
+		// Type deltaT = T2(i)-T1(i); // time increment between cap and recap
+		// Type meanL2 = Linf-(Linf-L1(i))*exp(-K*deltaT); // vB at recap
+		Type meanL2 = Linf-(Linf-L1(i))*exp(-K*deltaT(i)); // vB at recap
 		nll -= dnorm(L2(i), meanL2, sigma, true); // Gaussian lkhd
+		// ^ vB reference point = cap
 	}
 
 	//--------------------------------------------------------------------------
