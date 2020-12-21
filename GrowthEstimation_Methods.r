@@ -167,7 +167,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
 
 Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                   output.post.draws=F,lb.sd=NULL,
-                  mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
+                  mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
   # uniform priors with user-supplied hyperparam
   # hyperpar=list(lbubmuinf,lbubK) for consisetncy across methods, while bounds
   # for lbubsigmainf, lbubmuA, lbubsigmaA and lbubsigmaeps are hard-coded below.
@@ -220,35 +220,36 @@ Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
     # val.tmb <- obj$fn()
   } else {stop('Only meth="nlminb" is allowed for now.')}
   
-  ### MCMC based on NUTS
-  obj <- MakeADFun(data=datalist,parameters=parlist,
-                   # random=c('logLinf','logA'), # all same param for MCMC
-                   DLL="Laslett",silent=T)
-  nchains <- mcmc.control$nchains
-  rad.unif <- 0.2 # random ini from Unif[-rad.unif,+rad.unif]
-  initlist <- vector('list',nchains)
-  for (j in 1:nchains){
-    initlist[[j]] <- list('logmuinf'=log(par[1])+runif(1,-rad.unif,rad.unif),
-                          'logsigmainf'=runif(1,-rad.unif,rad.unif), # log(1)
-                          'logK'=log(par[2])+runif(1,-rad.unif,rad.unif),
-                          'logmuA'=1+runif(1,-rad.unif,rad.unif),
-                          'logsigmaA'=runif(1,-rad.unif,rad.unif),
-                          'logsigmaeps'=runif(1,-rad.unif,rad.unif),
-                          'logLinf'=rep(log(par[1]),n)+runif(n,-rad.unif,rad.unif),
-                          'logA'=rep(1,n)+runif(n,-rad.unif,rad.unif))
+  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
+  mcmc.obj <- tmbstan(obj=obj,
+                      lower=rep(-Inf,length(unlist(parlist))),
+                      upper=rep(Inf,length(unlist(parlist))),
+                      silent=T,laplace=F,
+                      chains=mcmc.control$nchains,
+                      warmup=mcmc.control$warmup,
+                      iter=mcmc.control$iter,
+                      # init='random'
+                      init='last.par.best' # start from MLE above
+  )
+  
+  # traceplot(mcmc.obj, pars=c('logmuinf','logK'), inc_warmup=TRUE) # check conv
+  # pairs(mcmc.obj, pars=c('logmuinf','logK')) # post dist and scatterplots
+  # # ^ Linf and K typically correlate a lot (negatively), but not so linearly
+  
+  # extract MCMC post draws for derived quantities specified in obj's REPORT
+  mcmc.post <- as.matrix(mcmc.obj)
+  mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
+  for (i in 1:nrow(mcmc.post)){
+    mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('muinf','K')])
   }
-  mcmc.obj <- sample_tmb(obj=obj,iter=mcmc.control$iter,warmup=mcmc.control$warmup,
-                         # parallel=T,cores=nchains, # library(snowfall)
-                         chains=nchains,init=initlist,seeds=1:nchains)
-  mcmc.post <- extract_samples(mcmc.obj) # posterior draws
-  mcmc.Linf <- exp(mcmc.post$logmuinf)
-  mcmc.K <- exp(mcmc.post$logK)
+  # colMeans(mcmc.est) # post means for Linf and K
+  
   
   ### output
-  res <- list('par'=c(mean(mcmc.Linf),mean(mcmc.K)),
+  res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
               'par.TMB'=theta.tmb,
-              'se'=c(sqrt(var(mcmc.Linf)/length(mcmc.Linf)),
-                     sqrt(var(mcmc.K)/length(mcmc.K))),
+              'se'=c(sqrt(var(mcmc.est[,1])),  # /length(mcmc.est[,1])
+                     sqrt(var(mcmc.est[,2]))), # /length(mcmc.est[,2])
               'se.TMB'=se.theta.tmb#,
               # 'other.par'=theta[-c(1,3)],'other.par.se'=se.theta[-c(1,3)],
   )
@@ -261,14 +262,14 @@ Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
     # if (onlyTMB){
     #   warning('Cannot output posterior draws if onlyTMB=TRUE.')
     # } else {
-    res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
+    res$post.draws <- list('Linf'=mcmc.est[,1],'K'=mcmc.est[,2])
     # res$post.draws <- as.list(mcmc.post)
     # }
   }
   
   # if (!onlyTMB){ # equal-tailed 95% credible intervals based on MCMC draws
-  res$cred.int <- list('Linf'=quantile(mcmc.Linf,probs=c(0.025,0.975)),
-                       'K'=quantile(mcmc.K,probs=c(0.025,0.975)))
+  res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
+                       'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
   # }
   
   res$value.TMB <- opt$obj
@@ -292,7 +293,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
                   hyperpar=NULL,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
-                  mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
+                  mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
   
   ### setup priors
   
@@ -403,7 +404,6 @@ Bfa65 <- function(par,L1,L2,deltaT,
   if (meth!='nlminb'){warning('Only meth="nlminb" supported for now.')}
   # if (!compute.se){warning('se will be computed anyway.')}
   
-  
   # n <- length(L1)
   
   datalist <- list('L1'=L1,'L2'=L2,
@@ -412,7 +412,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
                    'hp_Linf'=hyperpar[[1]], # user-supplied
                    'hp_K'=hyperpar[[2]], # user-supplied
                    'hp_sigma'=hyperpar[[3]], # user-supplied
-                   'priordist'=priordist.code) # as of v0.2.1 vector dim 3
+                   'priordist'=priordist.code) # as of v0.2.1: vector dim 3
   parlist <- list('logLinf'=log(par[1]),
                   'logK'=log(par[2]),
                   'logsigma'=0)
@@ -424,24 +424,31 @@ Bfa65 <- function(par,L1,L2,deltaT,
                 control=list(eval.max=5000,iter.max=5000))
   theta.tmb <- exp(opt$par[1:2]) # naive estimates without sdreport()
   
-  ### MCMC based on NUTS
+  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
   if (!onlyTMB & all(priordist.code!=0)){
-    nchains <- mcmc.control$nchains
-    rad.unif <- 0.2 # random ini from Unif[-rad.unif,+rad.unif]
-    initlist <- vector('list',nchains)
-    for (j in 1:nchains){
-      initlist[[j]] <- list('logLinf'=log(par[1])+runif(1,-rad.unif,rad.unif),
-                            'logK'=log(par[2])+runif(1,-rad.unif,rad.unif),
-                            'logsigma'=runif(1,-rad.unif,rad.unif))
-    }
-    mcmc.obj <- sample_tmb(obj=obj,iter=mcmc.control$iter,warmup=mcmc.control$warmup,
-                           # parallel=T,cores=nchains, # library(snowfall)
-                           chains=nchains,init=initlist,seeds=1:nchains)
-    mcmc.post <- extract_samples(mcmc.obj) # posterior draws
-    mcmc.Linf <- exp(mcmc.post$logLinf)
-    mcmc.K <- exp(mcmc.post$logK)
+    mcmc.obj <- tmbstan(obj=obj,lower=rep(-Inf,3),upper=rep(Inf,3),
+                        silent=T,laplace=F,
+                        chains=mcmc.control$nchains,
+                        warmup=mcmc.control$warmup,
+                        iter=mcmc.control$iter,
+                        # init='random'
+                        init='last.par.best' # start from MLE above
+    )
     
-    res <- list('par'=c(mean(mcmc.Linf),mean(mcmc.K)),'par.TMB'=theta.tmb)
+    # traceplot(mcmc.obj, pars=names(obj$par), inc_warmup=TRUE) # check conv
+    # pairs(mcmc.obj, pars=names(obj$par)) # post dist and scatterplots
+    # # ^ Linf and K typically correlate a lot (negatively)
+    
+    # extract MCMC post draws for derived quantities specified in obj's REPORT
+    mcmc.post <- as.matrix(mcmc.obj)
+    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
+    for (i in 1:nrow(mcmc.post)){
+      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('Linf','K')])
+    }
+    # colMeans(mcmc.est) # post means for Linf and K
+    
+    res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
+                'par.TMB'=theta.tmb)
     # ^ MCMC point estimates are posterior means
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
@@ -453,8 +460,9 @@ Bfa65 <- function(par,L1,L2,deltaT,
   ### optional: compute standard errors
   if (compute.se){
     if (!onlyTMB & all(priordist.code!=0)){
-      res$se <- c(sqrt(var(mcmc.Linf)/length(mcmc.Linf)),
-                  sqrt(var(mcmc.K)/length(mcmc.K))) # posterior naive se
+      res$se <- c(sqrt(var(mcmc.est[,1])), # /length(mcmc.est[,1])
+                  sqrt(var(mcmc.est[,2]))) # /length(mcmc.est[,2])
+      # ^ posterior naive se
       names(res$se) <- c('Linf','K')
     } else {
       res$se <- c(NA,NA)
@@ -475,13 +483,15 @@ Bfa65 <- function(par,L1,L2,deltaT,
       warning('No posterior draws if onlyTMB=TRUE or not all priordist set.')
     } else {
       # res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
-      res$post.draws <- as.list(mcmc.post)
+      # res$post.draws <- as.list(mcmc.post)
+      res$post.draws <- list('Linf'=mcmc.est[,1],
+                             'K'=mcmc.est[,2])
     }
   }
   
   if (!onlyTMB & all(priordist.code!=0)){
-    res$cred.int <- list('Linf'=quantile(mcmc.Linf,probs=c(0.025,0.975)),
-                         'K'=quantile(mcmc.K,probs=c(0.025,0.975)))
+    res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
+                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
     # ^ equal-tailed 95% credible intervals based on MCMC draws
   }
   
@@ -509,7 +519,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
 zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                  rand.ini=list(perform=F,'n'=10,'radius'=0.1),
                  onlyTMB=F,output.post.draws=F,lb.sd=NULL,enablepriors=1,
-                 mcmc.control=list('nchains'=1,'iter'=5000,'warmup'=1000)){
+                 mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
   # uniform priors with user-supplied hyperparam
   # hyperpar=list(lbubmuinf,lbubK) for consistency across methods, while bounds
   # for sigma are hard-coded below.
@@ -618,36 +628,33 @@ zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
     # mess.tmb <- opt$mess
   }
   
-  ### MCMC based on NUTS
+  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
   if (!onlyTMB){
-    obj <- MakeADFun(data=datalist,parameters=parlist,
-                     # random=c('logLinf','logK','logA'), # all same for MCMC
-                     DLL="Zhang",silent=T)
-    nchains <- mcmc.control$nchains
-    rad.unif <- 0.2 # random ini from Unif[-rad.unif,+rad.unif]
-    initlist <- vector('list',nchains)
-    for (j in 1:nchains){
-      initlist[[j]] <- list('logmuinf'=log(par[1])+runif(1,-rad.unif,rad.unif),
-                            'logsigmainf'=runif(1,-rad.unif,rad.unif),
-                            'logmuK'=log(par[2])+runif(1,-rad.unif,rad.unif),
-                            'logsigmaK'=runif(1,-rad.unif,rad.unif),
-                            'logmuA'=1+runif(1,-rad.unif,rad.unif),
-                            'logsigmaA'=runif(1,-rad.unif,rad.unif),
-                            'logsigmaeps'=runif(1,-rad.unif,rad.unif),
-                            'logLinf'=rep(log(par[1]),n)+runif(n,-rad.unif,rad.unif),
-                            'logK'=rep(log(par[2]),n)+runif(n,-rad.unif,rad.unif),
-                            'logA'=rep(1,n)+runif(n,-rad.unif,rad.unif))
-    }
-    mcmc.obj <- sample_tmb(obj=obj,iter=mcmc.control$iter,warmup=mcmc.control$warmup,
-                           # parallel=T,cores=nchains, # library(snowfall)
-                           chains=nchains,init=initlist,seeds=1:nchains)
-    mcmc.post <- extract_samples(mcmc.obj) # posterior draws
-    mcmc.Linf <- exp(mcmc.post$logmuinf)
-    mcmc.K <- exp(mcmc.post$logmuK)
+    mcmc.obj <- tmbstan(obj=obj,
+                        lower=rep(-Inf,length(unlist(parlist))),
+                        upper=rep(Inf,length(unlist(parlist))),
+                        silent=T,laplace=F,
+                        chains=mcmc.control$nchains,
+                        warmup=mcmc.control$warmup,
+                        iter=mcmc.control$iter,
+                        # init='random'
+                        init='last.par.best' # start from MLE above
+    )
     
-    res <- list('par'=c(mean(mcmc.Linf),mean(mcmc.K)),'par.TMB'=theta.tmb,
-                'se'=c(sqrt(var(mcmc.Linf)/length(mcmc.Linf)),
-                       sqrt(var(mcmc.K)/length(mcmc.K))),
+    # traceplot(mcmc.obj, pars=c('logmuinf','logmuK'), inc_warmup=TRUE) # check conv
+    # pairs(mcmc.obj, pars=c('logmuinf','logmuK')) # post dist and scatterplots
+    
+    # extract MCMC post draws for derived quantities specified in obj's REPORT
+    mcmc.post <- as.matrix(mcmc.obj)
+    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
+    for (i in 1:nrow(mcmc.post)){
+      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('muinf','muK')])
+    }
+    # colMeans(mcmc.est) # post means for (expectation of) Linf and K
+
+    res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),'par.TMB'=theta.tmb,
+                'se'=c(sqrt(var(mcmc.est[,1])),  # /length(mcmc.est[,1])
+                       sqrt(var(mcmc.est[,2]))), # /length(mcmc.est[,2])
                 'se.TMB'=se.theta.tmb)
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
@@ -665,14 +672,13 @@ zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
     if (onlyTMB){
       warning('Cannot output posterior draws if onlyTMB=TRUE.')
     } else {
-      res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
+      res$post.draws <- list('Linf'=mcmc.est[,1],'K'=mcmc.est[,2])
       # res$post.draws <- as.list(mcmc.post)
-      
     }
   }
   if (!onlyTMB){ # equal-tailed 95% credible intervals based on MCMC draws
-    res$cred.int <- list('Linf'=quantile(mcmc.Linf,probs=c(0.025,0.975)),
-                         'K'=quantile(mcmc.K,probs=c(0.025,0.975)))
+    res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
+                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
   }
   
   res$value.TMB <- opt$obj

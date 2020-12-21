@@ -121,9 +121,13 @@ Type objective_function<Type>::operator() () {
 	// Outputs
 	//--------------------------------------------------------------------------
 
+	REPORT(Linf);
+	REPORT(K);
+	REPORT(sigma);
+
 	ADREPORT(Linf);
 	ADREPORT(K);
-	ADREPORT(sigma);
+	// ADREPORT(sigma); // for later
 
 	return nll;
 }

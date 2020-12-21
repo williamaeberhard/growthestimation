@@ -6,7 +6,9 @@
 
 ### setup
 require(TMB) # needed for zh09, la02, Bfa65 and Bla02
-require(adnuts) # needed for Bfa65, Bla02 and zh09
+require(tmbstan)
+# ^ for tmbstan function for MCMC on TMB obj, calls rstan, needed for Bfa65,
+#   Bla02 and zh09
 
 compile("FabensBayesian.cpp") # only need to run once
 compile("Laslett.cpp") # only need to run once
@@ -96,25 +98,25 @@ est <- vector('list',n.est)
 
 hp.unif <- list(c(0,500),c(0,2)) # hyperparam: lb and ub for Linf and K
 
-mcmc.control <- list('nchains'=1,'iter'=1000,'warmup'=200)
+mcmc.control <- list('nchains'=3,'iter'=2000,'warmup'=1000)
 # ^ all should be larger, just for the sake of the demo here
 
 # ## pure vB, no gv or meas err
 # L1 <- dat$trueLcap
 # L2 <- dat$trueLrecap
 # deltaT <- dat$truedeltaT
-## gv, but no meas err
-L1 <- dat$gvLcap
-L2 <- dat$gvLrecap
-deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
+# ## gv, but no meas err
+# L1 <- dat$gvLcap
+# L2 <- dat$gvLrecap
+# deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
 # ## no gv, but meas err
 # L1 <- dat$eLcap
 # L2 <- dat$eLrecap
 # deltaT <- dat$truedeltaT # with only meas err on lengths, ages remain the same
-# ##  with both gv and meas err
-# L1 <- dat$Lcap
-# L2 <- dat$Lrecap
-# deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
+##  with both gv and meas err
+L1 <- dat$Lcap
+L2 <- dat$Lrecap
+deltaT <- dat$deltaT # deltaT modified with gv since neg correlated with L1
 
 # ^ compare all methods on different sets of data
 
@@ -180,6 +182,7 @@ arrows(x0=1:n.est,x1=1:n.est,angle=90,code=3,length=0.1,
        y0=est.K-2*se.K,y1=est.K+2*se.K)
 abline(h=trueK,col='red')
 par(mfrow=c(1,1))
+
 
 
 #////////////////////////////////////////////////////////////////////////////

@@ -64,6 +64,7 @@ Type objective_function<Type>::operator() () {
 	// Misc
 	DATA_INTEGER(enablepriors); // 0 = disabled, 1 = all enabled
 	
+
 	//--------------------------------------------------------------------------
 	// Setup, procedures and init
 	//--------------------------------------------------------------------------
@@ -86,6 +87,7 @@ Type objective_function<Type>::operator() () {
 
 	Type nll = 0.0; // init neg loglik
 
+
 	//--------------------------------------------------------------------------
 	// Priors
 	//--------------------------------------------------------------------------
@@ -102,6 +104,7 @@ Type objective_function<Type>::operator() () {
 		nll += neglogdunif(sigmaeps, lbubsigmaeps(0), lbubsigmaeps(1), n);
 	}
 
+
 	//--------------------------------------------------------------------------
 	// Random effects
 	//--------------------------------------------------------------------------
@@ -112,6 +115,7 @@ Type objective_function<Type>::operator() () {
 		nll -= dnorm(K(i), muK, sigmaK, true);
 		nll -= dgamma(A(i), shapeA, scaleA, true);
 	}
+
 
 	//--------------------------------------------------------------------------
 	// Observation equations
@@ -127,9 +131,13 @@ Type objective_function<Type>::operator() () {
 		// ^ vB reference point = T0
 	}
 
+
 	//--------------------------------------------------------------------------
 	// Outputs
 	//--------------------------------------------------------------------------
+
+	REPORT(muinf); // to export MCMC post draw with tmbstan
+	REPORT(muK); // to export MCMC post draw with tmbstan
 
 	ADREPORT(muinf);
 	ADREPORT(sigmainf);
