@@ -49,14 +49,15 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   #' \code{deltaT} simulated small enough, then observed length at recapture
   #' can be smaller than observed length at capture (negative growth). Default
   #' value (0.067) yields roughly 20% relative error on average.
-  #' @details Randomness in: \code{Linf} (Gaussian); \code{K} (Gaussian)
-  #' thorugh randomness in the slope of the growth performance function; 
-  #' length at capture (\code{sizedist}); \code{deltaT} (log-normal, negatively
-  #' correlated with age at capture); and measurement error in observed lengths
-  #' at capture and recapture (Gaussian). TODO: more details.
+  #' @details Randomness in: \code{Linf} (Gaussian, simulated); \code{K}
+  #' (propagated from \code{Linf} through the slope of the growth performance
+  #' function; length at capture \code{sizedist} (simulated); \code{deltaT}
+  #' (lognormal, simulated, negatively correlated with age at capture); and
+  #' measurement error in observed lengths at capture and recapture (both
+  #' Gaussian). TODO: more details.
   #' @return A list with the following objects:
   #' \itemize{
-  #'   \item{\code{L1}}{numeric vector of length}
+  #'   \item{\code{Lcap}}{numeric vector of length}
   #'   \item{TODO}{TODO.}
   #' }
   
@@ -76,7 +77,7 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   T0 <- log(1-Lbirth/trueLinf)/trueK # as of v0.3: T0 from supplied Lbirth, vB
   # ^ time unit from supplied trueK
   
-  trueLmax <- 0.95*trueLinf # assumption about observed max length
+  trueLmax <- 0.99*trueLinf # as of v0.3: assumption about observed max length
   trueLmean <- (trueLmax+Lbirth)/2
   
   ### maximum age
@@ -205,7 +206,7 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   T0i <- log(1-Lbirth/Linfi)/Ki # as of v0.3: T0i from Lbirth, vB
   
   ### max lengths and age given Linfi and Ki
-  Lmaxi <- 0.95*Linfi
+  Lmaxi <- 0.99*Linfi # as of v0.3
   trueTmaxi <- -log(1-Lmaxi/Linfi)/Ki + T0i # vB for Lmaxi, T0i as ref point
   # trueTmaxi <- 3/Ki
   

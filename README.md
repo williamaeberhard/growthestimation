@@ -3,6 +3,7 @@ GrowthEstimation: R code for various estimation methods of von Bertalanffy growt
 
 These R scripts provide functions for estimating the von Bertalanffy growth parameters (Linf and K) from mark-recapture data. These allow to replicate the results in the simulation study of Dureuil et al. (2020+), including the CapRecapSim R function to simulate mark-recapture data under various scenarios.
 
+
 ### Contents
 
 Files contained in this repository:
@@ -14,6 +15,7 @@ Files contained in this repository:
 * FabensTwoPop.cpp: a C++ script to compile for the LRT comparing two populations;
 * this README file.
 
+
 ### Version History
 
 This is GrowthEstimation version 0.3. Changelog since last version:
@@ -23,6 +25,8 @@ This is GrowthEstimation version 0.3. Changelog since last version:
   - changed default value of sd.L from 0.3 to 0.2, better if simulated lengths at capture are slightly more concentrated
   - deleted output Tcap and Trecap, no use considering dates if true ages are expressed wrt birth = 0.
   - new mandatory argument Lbirth, so that we do not use Pauly (1979) equation for T0 anymore but rather use von Bertlanffy at birth to infer T0 from supplied Linf and K
+  - use Lmax=0.99*Linf as in GrowthPriors
+* GrowthPriors: drop Froese and Binohlan's (2000) relation between Lmax and Linf, very close toi linear anyway, use now Linf=Lmax/0.99.
 
 Changelog v0.2.2:
 * Created GrowthEstimation_Tests.r where a LRT is defined to compare two populations in terms of (Linf,K) jointly, according to Fabens (1965) formulation. Added code at the end of GrowthEstimation_Main.r shows the usage on some simulated data.

@@ -121,7 +121,8 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   nsize <- length(POP$TLinfinity)
   
   ### prior for Linf from Lmax 
-  Linf <- 10^(0.044+0.9841*log10(Lmax))
+  # Linf <- 10^(0.044+0.9841*log10(Lmax)) # Froese and Binohlan (2000)
+  Linf <- Lmax/0.99 # simpler assumption, anyway close to Froese and Binohlan (2000)
   
   # calculate prior boundaries for Linf (uniform prior)
   # take priors for Linf as X% of Lmax
@@ -133,7 +134,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   POP$phi <- log10(POP$K)+2*log10(POP$TLinfinity)
   
   # get upper and lower quantiles and median
-  MedPhi <- as.numeric(quantile(POP$phi, 0.5))
+  MedPhi <- as.numeric(quantile(POP$phi, 0.5)) # median
   LowPhi <- as.numeric(quantile(POP$phi, LQ))
   UpPhi <- as.numeric(quantile(POP$phi, UQ))
   
@@ -145,7 +146,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   
   
   ### Output
-  df <- data.frame('species' = species, 
+  df <- data.frame('species'=species, 
                    'category'=category,
                    'Lmax'=Lmax,
                    'n'=nsize,
