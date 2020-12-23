@@ -131,9 +131,11 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   
   
   ### Gaussian prior mean and sd for Linf
-  
-  
-  
+  meanLinf <- Lmax # (LowLinf+UpLinf)/2 # center of uniform prior
+  sdLinf <- uniroot(f=function(sdLinf){meanLinf+3*sdLinf-UpLinf},
+                    interval=c(0,1e5))$root
+  # ^ find sd such that uniform upper bound matches mean+3*sd. So prob under
+  #   Gaussian within uniform bounds is pnorm(3)-pnorm(-3) = 99.7% roughly
   
   ### Growth performance index phi according to Pauly (slope of -2)
   POP$phi <- log10(POP$K)+2*log10(POP$TLinfinity)
@@ -155,12 +157,14 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
                    'category'=category,
                    'Lmax'=Lmax,
                    'n'=nsize,
-                   'Linf'=Linf,
-                   'LowLinf'=LowLinf,
-                   'UpLinf'=UpLinf,
-                   'K'=K,
-                   'LowK'=LowK,
-                   'UpK'=UpK)
+                   'Linf'=Linf,       # for uniform prior on Linf
+                   'LowLinf'=LowLinf, # for uniform prior on Linf
+                   'UpLinf'=UpLinf,   # for uniform prior on Linf
+                   'meanLinf'=meanLinf, # for Gaussian prior on Linf
+                   'sdLinf'=sdLinf,     # for Gaussian prior on Linf
+                   'K'=K,       # uniform prior on K
+                   'LowK'=LowK, # uniform prior on K
+                   'UpK'=UpK)   # uniform prior on K
   
   return(df)
 }
