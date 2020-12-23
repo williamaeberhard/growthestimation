@@ -120,7 +120,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   ### "sample" size
   nsize <- length(POP$TLinfinity)
   
-  ### prior for Linf from Lmax 
+  ### uniform prior bounds for Linf from Lmax 
   # Linf <- 10^(0.044+0.9841*log10(Lmax)) # Froese and Binohlan (2000)
   Linf <- Lmax/0.99 # simpler assumption, anyway close to Froese and Binohlan (2000)
   
@@ -128,6 +128,11 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   # take priors for Linf as X% of Lmax
   LowLinf <- LowP*Lmax # uniform prior lower bound
   UpLinf <- UpP*Lmax # uniform prior upper bound
+  
+  
+  ### Gaussian prior mean and sd for Linf
+  
+  
   
   
   ### Growth performance index phi according to Pauly (slope of -2)
@@ -915,7 +920,7 @@ fr88 <- function(par,L1,L2,deltaT,try.many.ini=T,meth='nlminb',
     # ^ gradually shrinking subsets of data to compute ini, original=c(0.8,1.2)
     
     optval1 <- opt$value # neg loglik value in first opt
-    opt0 <- opt
+    opt1 <- opt
     optval0 <- optval1+1
     it.ini <- 1L # to keep rack of all ini tried in coef.subs
     while (optval1<optval0 & it.ini<=length(coef.subs)){
