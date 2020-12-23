@@ -26,6 +26,7 @@ This is GrowthEstimation version 0.3. Changelog since last version:
   - deleted output Tcap and Trecap, no use considering dates if true ages are expressed wrt birth = 0.
   - new mandatory argument Lbirth, so that we do not use Pauly (1979) equation for T0 anymore but rather use von Bertlanffy at birth to infer T0 from supplied Linf and K
   - use Lmax=0.99*Linf as in GrowthPriors
+  - deleted warnings about ages at recapture exceeding 3/K, not useful since we use a max age based on vB at Lmax=0.99*Linf.
 * GrowthPriors: drop Froese and Binohlan's (2000) relation between Lmax and Linf, very close toi linear anyway, use now Linf=Lmax/0.99.
 * Francis (1988) estrimation method fr88: added try.many.ini boolean argument, if TRUE then try many starting values (based on data subsets as in fishmethods::grotag) in addition to the supplied one (optim highly sensitive to ini).
 

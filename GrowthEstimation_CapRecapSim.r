@@ -166,9 +166,10 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   ### compute date of recap T2 and age at recap (years)
   # T2 <- T1+deltaT*ndays # arithmetic in days # as of v0.3: deleted, no use
   agerecap <- agecap+deltaT # in years
-  if (any((3/trueK)<agerecap)){
-    warning('Some ages at recapture exceed 3/trueK.')
-  }
+  # if (any((3/trueK)<agerecap)){
+  #   warning('Some ages at recapture exceed 3/trueK.')
+  # }
+  # # ^ as of v0.3: warning not useful, we now use trueTmax from vB at Lmax
 
   # cbind(agecap,deltaT,agerecap)[agecap%in%sort(agecap)[c(1,floor(n/2),n)],]
   # # ^ check neg corr between agecap and deltaT so that agerecap not too high
@@ -193,7 +194,7 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   #/////////////////////////////////////////////////////////////////////////////
   
   ### introduce individual growth variability via the growth performance index
-  Linfi <- trueLinf+rnorm(n,mean=0,sd=sd.Linf*trueLinf)
+  Linfi <- trueLinf + rnorm(n,mean=0,sd=sd.Linf*trueLinf)
   truephi <- log10(trueK)+2*log10(trueLinf)
   # ^ growth performance index linking Linf to K, Pauly
   
@@ -242,9 +243,11 @@ CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
   
   ### compute L1 and L2 with growth variability, based on ages with gv
   agerecapgv <- agecapgv+deltaTi # in years
-  if (any((3/Ki)<agerecapgv)){
-    stop('Some ages at recapture exceed 3/Ki.')
-  }
+  # if (any((3/Ki)<agerecapgv)){
+  #   warning('Some ages at recapture exceed 3/Ki.')
+  # }
+  # ^ as of v0.3: warning not useful, we now use trueTmaxi from vB at Lmax
+  
   L1gv <- Linfi*(1-exp(-Ki*(agecapgv-T0i)))
   L2gv <- Linfi*(1-exp(-Ki*(agerecapgv-T0i)))
   # ^ vB at cap and recap, randomness in Linf propagated everywhere
