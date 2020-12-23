@@ -27,6 +27,7 @@ This is GrowthEstimation version 0.3. Changelog since last version:
   - new mandatory argument Lbirth, so that we do not use Pauly (1979) equation for T0 anymore but rather use von Bertlanffy at birth to infer T0 from supplied Linf and K
   - use Lmax=0.99*Linf as in GrowthPriors
 * GrowthPriors: drop Froese and Binohlan's (2000) relation between Lmax and Linf, very close toi linear anyway, use now Linf=Lmax/0.99.
+* Francis (1988) estrimation method fr88: added try.many.ini boolean argument, if TRUE then try many starting values (based on data subsets as in fishmethods::grotag) in addition to the supplied one (optim highly sensitive to ini).
 
 Changelog v0.2.2:
 * Created GrowthEstimation_Tests.r where a LRT is defined to compare two populations in terms of (Linf,K) jointly, according to Fabens (1965) formulation. Added code at the end of GrowthEstimation_Main.r shows the usage on some simulated data.
