@@ -1,10 +1,10 @@
-#/////////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data v0.3 ####
-#/////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////
+#### GrowthEstimation: compare methods on simulated data v0.3.1 ####
+#///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
 
-### setup
+### // setup ----
 require(TMB) # needed for zh09, la02, Bfa65 and Bla02
 require(tmbstan)
 # ^ for tmbstan function for MCMC on TMB obj, calls rstan, needed for Bfa65,
@@ -35,8 +35,7 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 #  - par: vector of length 2, starting values for Linf and K (in that order)
 #  - L1: vector of lengths at cap
 #  - L2: vector of lengths at recap
-#  - T1: vector of dates at cap
-#  - T2: vector of dates at recap
+#  - deltaT: vector of time intervals between cap and recap
 
 # In addition, the 2 Bayesian methods zh09 and Bla02 require:
 #  - hyperpar: a list of two numeric vectors, both of length 2, containing the
@@ -55,11 +54,11 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 #              on the log scale.
 
 # The methods return different arguments, but they all have:
-#  - $par: the vector of estimates of Linf and K (in that order)
+#  - $par: the vector of (point) estimates of Linf and K (in that order)
 #  - $se: the vector of standard errors of Linf and K (in that order).
 
 
-### design, simulate data
+### // design, simulate data ----
 n <- 100 # sample size, nb of capture-recapture pairs
 trueLinf <- 123.5 # based on starry smooth-hound Mustelus asterias
 trueK <- 0.146 # based on starry smooth-hound Mustelus asterias
@@ -74,10 +73,10 @@ set.seed(1234) # for replicability
 dat <- CapRecapSim(n=n,trueLinf=trueLinf,trueK=trueK,sizedist='norm')
 
 str(dat)
-# ^ what really matters is the "realistic" data: Lcap, Lrecap, Tcap and Trecap
-# All ages are in years, so that K/Ki expressed in year^{-1}
+# ^ what really matters is the "realistic" data: Lcap, Lrecap, and deltaT
+# All ages and time intervals are in years, so that K/Ki expressed in year^{-1}
 
-### for a given method, say fa65, study impact of gv and measurement error
+### // for a given method, say fa65, see impact of gv and measurement error ----
 cbind(c(trueLinf,trueK),
       fa65(par=par.ini,L1=dat$trueLcap,L2=dat$trueLrecap, # no gv, no meas err
            deltaT=dat$truedeltaT,compute.se=F)$par,
@@ -91,7 +90,7 @@ cbind(c(trueLinf,trueK),
 # 1st col = true values, 2nd col = est under no gv and no meas err, etc.
 
 
-### Compare estimates of (mean) Linf and K among methods
+### // compare estimates of (mean) Linf and K among methods ----
 names.est <- c('gh59','fa65','fr88','ja91','la02','zh09','Bfa65','Bla02')
 n.est <- length(names.est) # number of estimators to compare
 est <- vector('list',n.est)
@@ -99,7 +98,7 @@ est <- vector('list',n.est)
 hp.unif <- list(c(0,500),c(0,2)) # hyperparam: lb and ub for Linf and K
 
 mcmc.control <- list('nchains'=3,'iter'=2000,'warmup'=1000)
-# ^ all should be larger, just for the sake of the demo here
+# ^ all should be larger, just for the sake of the demo here.
 
 # ## pure vB, no gv or meas err
 # L1 <- dat$trueLcap
@@ -151,7 +150,7 @@ dimnames(est.compare) <- list(c('Linf','K'),c('true',names.est[1:n.est]))
 round(est.compare,4)
 
 
-### plot estimate and 95% CI as error bar
+### // plot estimate and 95% CI as error bar ----
 # Note: for Bayesian methods, more appropriate to compute credible intervals
 #       from posterior draws, here CI just for the sake of the comparison
 
@@ -191,8 +190,8 @@ par(mfrow=c(1,1))
 
 # rm(list=ls())
 
-### setup
-require(TMB) # needed for zh09, la02, Bfa65 and Bla02
+### // setup ----
+require(TMB) # needed for FabensTwoPop
 
 compile("FabensTwoPop.cpp") # only need to run once
 dyn.load(dynlib("FabensTwoPop")) # to run for every new R session
@@ -200,7 +199,7 @@ dyn.load(dynlib("FabensTwoPop")) # to run for every new R session
 source('GrowthEstimation_Tests.r')
 
 
-### sim data under exact Fabens formulation, but different pop1/pop2
+### // sim data under exact Fabens formulation, but different pop1/pop2 ----
 n <- 100 # total sample size, nb of capture-recapture pairs
 n1 <- 50 # sample size pop1
 n2 <- n-n1 # sample size pop2
@@ -233,7 +232,7 @@ Lrecap2 <- trueLinf2 - (trueLinf2-Lcap2)*exp(-trueK2*deltaT2) + eps2 # pop 2
 # ^ both follow the vB curve with some iid Gaussian error on lengths at recap
 
 
-### compute likelihood ratio test (LRT) to compare the two pop
+### // compute likelihood ratio test (LRT) to compare the two pop ----
 LRT_2pop_fa65(par=par.ini,alpha=0.05,
   L1.pop1=Lcap1,L2.pop1=Lrecap1,T1.pop1=rep(0,n1),T2.pop1=deltaT1,
   L1.pop2=Lcap2,L2.pop2=Lrecap2,T1.pop2=rep(0,n2),T2.pop2=deltaT2)

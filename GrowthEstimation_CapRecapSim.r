@@ -1,10 +1,10 @@
 CapRecapSim <- function(n,trueLinf=123.5,trueK=0.146,Lbirth=30,
                         sizedist='norm',sd.L=0.2,
-                        scale.deltaT=1,min.deltaT=0.25,
-                        sd.Linf=0.067,sd.L1=0.033,sd.L2=0.067){
+                        scale.deltaT=3.5,min.deltaT=0.25,
+                        sd.Linf=0.017,sd.L1=0.033,sd.L2=0.067){
   
   #/////////////////////////////////////////////////////////////////////////////
-  #### Documentation v0.3 #### 
+  #### Documentation v0.3.1 #### 
   #/////////////////////////////////////////////////////////////////////////////
   
   # TODO: update doc

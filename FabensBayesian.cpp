@@ -1,4 +1,4 @@
-// Bayesian formulation of Fabens (1965) | v0.3
+// Bayesian formulation of Fabens (1965) | v0.3.1
 // Gaussian likelihood assumed (original Fabens only based on moments)
 // priors: Linf (uniform), K (uniform), sigma^2 (uniform)
 // model length at recap L2, given observed T1, T2 and L1

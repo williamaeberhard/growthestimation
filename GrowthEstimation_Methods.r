@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.3 ####
+#### GrowthEstimation v0.3.1 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -126,12 +126,15 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   
   # calculate prior boundaries for Linf (uniform prior)
   # take priors for Linf as X% of Lmax
-  LowLinf <- LowP*Lmax # uniform prior lower bound
-  UpLinf <- UpP*Lmax # uniform prior upper bound
+  # LowLinf <- LowP*Lmax # uniform prior lower bound
+  # UpLinf <- UpP*Lmax # uniform prior upper bound
+  LowLinf <- LowP*Linf # uniform prior lower bound
+  UpLinf <- UpP*Linf # uniform prior upper bound
+  # ^ as of v0.3: center on Linf rather than Lmax
   
   
   ### Gaussian prior mean and sd for Linf
-  meanLinf <- Lmax # (LowLinf+UpLinf)/2 # center of uniform prior
+  meanLinf <- Linf # (LowLinf+UpLinf)/2 # center of uniform prior
   sdLinf <- uniroot(f=function(sdLinf){meanLinf+3*sdLinf-UpLinf},
                     interval=c(0,1e5))$root
   # ^ find sd such that uniform upper bound matches mean+3*sd. So prob under
@@ -177,7 +180,7 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
 
 Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                   output.post.draws=F,lb.sd=NULL,
-                  mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
+                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
   # uniform priors with user-supplied hyperparam
   # hyperpar=list(lbubmuinf,lbubK) for consisetncy across methods, while bounds
   # for lbubsigmainf, lbubmuA, lbubsigmaA and lbubsigmaeps are hard-coded below.
@@ -303,7 +306,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
                   hyperpar=NULL,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
-                  mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
+                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
   
   ### setup priors
   
@@ -441,6 +444,8 @@ Bfa65 <- function(par,L1,L2,deltaT,
                         chains=mcmc.control$nchains,
                         warmup=mcmc.control$warmup,
                         iter=mcmc.control$iter,
+                        control=list(adapt_delta=0.99, # def=0.8, larger=safer
+                                     max_treedepth=15), # def=10, larger helps
                         # init='random'
                         init='last.par.best' # start from MLE above
     )
@@ -457,9 +462,11 @@ Bfa65 <- function(par,L1,L2,deltaT,
     }
     # colMeans(mcmc.est) # post means for Linf and K
     
-    res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
+    res <- list('par'=c(median(mcmc.est[,1]),median(mcmc.est[,2])),
+                # 'par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
+                # ^ post median better, dist can be very skewed with small n
                 'par.TMB'=theta.tmb)
-    # ^ MCMC point estimates are posterior means
+    # ^ MCMC point estimates are posterior median as of v0.3.1
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
   } else {
@@ -470,9 +477,10 @@ Bfa65 <- function(par,L1,L2,deltaT,
   ### optional: compute standard errors
   if (compute.se){
     if (!onlyTMB & all(priordist.code!=0)){
-      res$se <- c(sqrt(var(mcmc.est[,1])), # /length(mcmc.est[,1])
-                  sqrt(var(mcmc.est[,2]))) # /length(mcmc.est[,2])
-      # ^ posterior naive se
+      # res$se <- c(sqrt(var(mcmc.est[,1])),sqrt(var(mcmc.est[,2])))
+      # ^ posterior naive se numerically unstable if low n
+      res$se <- c(median(abs(mcmc.est[,1]-res$par[1])),
+                  median(abs(mcmc.est[,2]-res$par[2]))) # MADAM
       names(res$se) <- c('Linf','K')
     } else {
       res$se <- c(NA,NA)
@@ -529,7 +537,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
 zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                  rand.ini=list(perform=F,'n'=10,'radius'=0.1),
                  onlyTMB=F,output.post.draws=F,lb.sd=NULL,enablepriors=1,
-                 mcmc.control=list('nchains'=3,'iter'=5000,'warmup'=4000)){
+                 mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
   # uniform priors with user-supplied hyperparam
   # hyperpar=list(lbubmuinf,lbubK) for consistency across methods, while bounds
   # for sigma are hard-coded below.

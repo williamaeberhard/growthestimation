@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.3 ####
+#### GrowthEstimation v0.3.1 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 
@@ -47,7 +47,6 @@ LRT_2pop_fa65 <- function(par=NULL,alpha=0.05,
   ### fit1: unconstrained, full model where all param estimated
   obj1 <- MakeADFun(data=datalist,
                     parameters=parlist,
-                    # random=c('log_Nat','log_Fat'),
                     DLL="FabensTwoPop",silent=T)
 
   opt1 <- nlminb(start=obj1$par,obj=obj1$fn,gr=obj1$gr,
@@ -60,7 +59,6 @@ LRT_2pop_fa65 <- function(par=NULL,alpha=0.05,
   ### fit0: constrained under H0: (deltaLinf,deltaK) = 0
   obj0 <- MakeADFun(data=datalist,
                     parameters=parlist,
-                    # random=c('log_Nat','log_Fat'),
                     map=list('deltaLinf'=factor(NA), # fixed at 0
                              'deltaK'=factor(NA)), # fixed at 0
                     DLL="FabensTwoPop",silent=T)
