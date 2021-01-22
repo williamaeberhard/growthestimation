@@ -1,4 +1,4 @@
-// Model 1 of Zhang, Lessard and Campbell (2009) Fisheries Research | v0.3.1
+// Model 1 of Zhang, Lessard and Campbell (2009) Fisheries Research | v0.3.2
 // 3 randeff: Linf (Gaussian), K (Gausian) and A (gamma), all indep
 // originally Bayesian
 // option for uniform priors, user-supplied uniform bounds

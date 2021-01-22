@@ -18,7 +18,13 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.3.1. Changelog since last version:
+This is GrowthEstimation version 0.3.2. Changelog since last version:
+* Francis (1988) estimation method fr88:
+  - estimation of nu param now on log scale
+  - added my own initial values for g.alpha and g.beta, as good as multiple subsets yet faster than ini from fishmethods::grotag
+  - many variance functions specification available through new sdfunc argument (with possible values "const", "prop.L2", "prop.dL", and "prop.dT").
+
+Changelog v0.3.1:
 * Bfa65: point estimate from MCMC is now posterior median (posterior dist of both Linf and K can be very skewed if small sample size, and very similar to posterior mean/mode if large sample) and point estimate of spread is now median absolute deviation about the median (MADAM, numerically most stable in small samples)
 * all Bayesian estimation methods (zh09, Bfa65, and Bla02): default MCMC options are now 'nchains'=5, 'iter'=20000, and 'warmup'=10000.
 * CapRecapSim: default values set now for low growth variability level (sd.Linf=0.017) and short times at liberty (scale.deltaT=3.5).
@@ -29,7 +35,7 @@ Changelog v0.3:
 * CapRecapSim:
   - changed default value of sd.L from 0.3 to 0.2, better if simulated lengths at capture are slightly more concentrated
   - deleted output Tcap and Trecap, no use considering dates if true ages are expressed wrt birth = 0.
-  - new mandatory argument Lbirth, so that we do not use Pauly (1979) equation for T0 anymore but rather use von Bertlanffy at birth to infer T0 from supplied Linf and K
+  - new mandatory argument Lbirth, so that we do not use Pauly (1979) equation for T0 anymore but rather use von Bertalanffy at birth to infer T0 from supplied Linf and K
   - use Lmax=0.99*Linf as in GrowthPriors
   - deleted warnings about ages at recapture exceeding 3/K, not useful since we use a max age based on vB at Lmax=0.99*Linf.
 * GrowthPriors: drop Froese and Binohlan's (2000) relation between Lmax and Linf, very close to linear anyway, use now Linf=Lmax/0.99.

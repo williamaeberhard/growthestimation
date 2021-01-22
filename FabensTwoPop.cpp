@@ -1,4 +1,4 @@
-// Fabens (1965) estimation for two populations | v0.3.1
+// Fabens (1965) estimation for two populations | v0.3.2
 // Gaussian likelihood assumed (original Fabens only based on moments)
 // no priors, frequentist (ML) onyl for now
 // model length at recap L2, given observed T1, T2 and L1

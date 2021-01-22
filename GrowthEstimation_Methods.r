@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.3.1 ####
+#### GrowthEstimation v0.3.2 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -669,7 +669,7 @@ zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
       mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('muinf','muK')])
     }
     # colMeans(mcmc.est) # post means for (expectation of) Linf and K
-
+    
     res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),'par.TMB'=theta.tmb,
                 'se'=c(sqrt(var(mcmc.est[,1])),  # /length(mcmc.est[,1])
                        sqrt(var(mcmc.est[,2]))), # /length(mcmc.est[,2])
@@ -885,121 +885,186 @@ ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 #   numerical Hessian and delta method for (Linf,K). Since estimates not
 #   consistent, delta method is probably returning garbage.
 
-fr88 <- function(par,L1,L2,deltaT,try.many.ini=T,meth='nlminb',
-                 compute.se=T,tol.sd=1e-4){
-  # par argument now necessary, used as first ini to try
+fr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
+                 try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
+  # par argument now necessary, used as first ini to try and only one if
+  # try.many.ini=F
+  
   ### objective function
-  nll <- function(par,alpha,beta,deltaT,L1,L2,tol.sd){ # par=c(ga,gb,nu)
+  nll <- function(par,alpha,beta,deltaT,L1,L2,sdfunc,tol.sd){
+    # par=c(ga,gb,log(nu))
     ga <- par[1]
     gb <- par[2]
-    nu <- par[3] # sd = nu*mu, Francis' eq. (5)
-    deltaL <- L2-L1
-    mu <- ((beta*ga-alpha*gb)/(ga-gb)-L1)*(1-(1+(ga-gb)/(alpha-beta))^deltaT)
-    # ^ Francis' eq. (2)
-    std.dev <- nu*ifelse(mu>0, mu, tol.sd) # Francis' eq. (5)
-    pllvec <- dnorm(deltaL, mean=mu, sd=std.dev, log=T)
-    return(-sum(pllvec)) # negloglik
+    # nu <- par[3] # sd = nu*mu, Francis' eq. (5)
+    nu <- exp(par[3]) # est on log scale because > 0
+    
+    Linf <- (beta*ga-alpha*gb)/(ga-gb)
+    expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+    
+    if (sdfunc=='const'){ # constant sd across all obs = Fabens
+      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
+      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu, log=T))
+    } else if (sdfunc=='prop.L2'){ # sd proportional to expec length at recap
+      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
+      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu*mean.L2, log=T))
+    } else if (sdfunc=='prop.dL'){ # sd proportional to expec deltaL
+      # Francis' eq (5) with mu = expec deltaL
+      mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+      posdL <- ifelse(mean.dL>0, mean.dL, tol.sd) # in case of neg growth
+      nll <- -sum(dnorm(x=L2-L1, mean=mean.dL, sd=nu*posdL, log=T))
+    } else if (sdfunc=='prop.dT'){ # sd proportional to time at liberty
+      # cf. Francis (1988) remakrs in Intro on p. 43
+      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
+      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu*deltaT, log=T))
+    } else {
+      stop('sdfunc can only be "const", "prop.L2", "prop.dL", or "prop.dT".')
+    }
+    
+    # deltaL <- L2-L1
+    # mu <- ((beta*ga-alpha*gb)/(ga-gb)-L1)*(1-(1+(ga-gb)/(alpha-beta))^deltaT)
+    # # ^ Francis' eq. (2)
+    # std.dev <- nu*ifelse(mu>0, mu, tol.sd) # Francis' eq. (5)
+    # pllvec <- dnorm(deltaL, mean=mu, sd=std.dev, log=T)
+    
+    return(nll) # negloglik
   }
   
   ### setup
   alpha <- as.numeric(quantile(L1,0.1))
   beta <- as.numeric(quantile(L1,0.9))
-  deltaL <- as.numeric(L2-L1)
+  # deltaL <- as.numeric(L2-L1)
   # deltaT <- as.numeric(T2-T1) # as of v0.3: directly supply deltaT
   
   ### optimization with supplied par ini
-  par.ini <- c((par[1]-alpha)*(1-exp(-par[2])),
-               (par[1]-beta)*(1-exp(-par[2])),1)
-  # ^ transform (Linf,K) into (ga,gb), hardcoded starting value for nu
+  par.ini <- c((par[1]-alpha)*(1-exp(-par[2])), # g.alpha
+               (par[1]-beta)*(1-exp(-par[2])),  # g.beta
+               0)                               # log(nu)
+  # ^ transform (Linf,K) into (ga,gb), hardcoded ini value for nu on log scale
   
-  lb <- c(0.5*par.ini[1], 0.5*par.ini[2], 1e-6) # hardcoded lb for nu
-  ub <- c(1.5*par.ini[1], 1.5*par.ini[2], 100) # hardcoded ub for nu
+  lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log scale
+  ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log scale
   # ^ lower and upper bounds, from fishmethods::grotag
   
   if (meth=='nlminb'){
     opt <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
-                  alpha=alpha,beta=beta,L1=L1,L2=L2,deltaT=deltaT,tol.sd=tol.sd)
+                  alpha=alpha,beta=beta,
+                  L1=L1,L2=L2,deltaT=deltaT,
+                  sdfunc=sdfunc,tol.sd=tol.sd)
     opt$value <- opt$obj
   } else if (meth=='L-BFGS-B'){
     opt <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
                  method='L-BFGS-B',hessian=F, # only compute hess if compute.se=T
-                 alpha=alpha,beta=beta,L1=L1,L2=L2,deltaT=deltaT,tol.sd=tol.sd)
+                 alpha=alpha,beta=beta,
+                 L1=L1,L2=L2,deltaT=deltaT,
+                 sdfunc=sdfunc,tol.sd=tol.sd)
   } else {stop('Only "nlminb" and "L-BFGS-B" are allowed for meth.')}
   
-  ### optional: try many differen starting values, opt not convex
-  if (try.many.ini){ # then try supplied par and other ini based on data subsets
-    coef.subs <- list(c(0.7,1.3),c(0.8,1.2),c(0.9,1.1),c(0.95,1.05),c(0.99,1.01))
-    # ^ gradually shrinking subsets of data to compute ini, original=c(0.8,1.2)
-    
-    optval1 <- opt$value # neg loglik value in first opt
-    opt1 <- opt
-    optval0 <- optval1+1
-    it.ini <- 1L # to keep rack of all ini tried in coef.subs
-    while (optval1<optval0 & it.ini<=length(coef.subs)){
-      # keep shrinking subset for ini as long as optval decreases
-      opt0 <- opt1
-      optval0 <- optval1
+  
+  ### optional: try many different starting values, opt not convex
+  if (try.many.ini){ # then try supplied par and other ini
+    if (grotag.ini){ # then try ini as in fishmethods::grotag, with data subsets
+      coef.subs <- list(c(0.7,1.3),c(0.8,1.2),c(0.9,1.1),c(0.95,1.05),c(0.99,1.01))
+      # ^ gradually shrinking subsets of data to compute ini, original=c(0.8,1.2)
       
-      subs.a <- which(L1>(coef.subs[[it.ini]][1]*alpha)
-                      & L1<(coef.subs[[it.ini]][2]*alpha)
-                      & deltaT>median(deltaT))
-      # if (length(subs.a)==0){ # empty subset
-      #   subs.a <- which(L1>(0.7*alpha) & L1<(1.3*alpha) & deltaT>median(deltaT))
-      # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
-      subs.b <- which(L1>(coef.subs[[it.ini]][1]*beta)
-                      & L1<(coef.subs[[it.ini]][2]*beta)
-                      & deltaT>median(deltaT))
-      # if (length(subs.b)==0){ # empty subset
-      #   subs.b <- which(L1>(0.5*beta) & L1<(1.3*beta) & deltaT>median(deltaT))
-      # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
-      
-      if (length(subs.a)==0 | length(subs.b)==0){ # empty subset, no ini
-        optval1 <- optval0 # no improvement, stop
-      } else { # subsets not empty, ini computable
-        ga.ini <- mean(deltaL[subs.a]/deltaT[subs.a])
-        gb.ini <- mean(deltaL[subs.b]/deltaT[subs.b])
-        par.ini <- c(ga.ini,gb.ini,1) # hardcoded starting value for nu
+      optval1 <- opt$value # neg loglik value in first opt
+      opt1 <- opt
+      optval0 <- optval1+1
+      it.ini <- 1L # to keep track of all ini tried in coef.subs
+      while (optval1<optval0 & it.ini<=length(coef.subs)){
+        # keep shrinking subset for ini as long as optval decreases
+        opt0 <- opt1
+        optval0 <- optval1
         
-        lb <- c(0.5*par.ini[1], 0.5*par.ini[2], 1e-6) # hardcoded lb for nu
-        ub <- c(1.5*par.ini[1], 1.5*par.ini[2], 100) # hardcoded ub for nu
-        # ^ lower and upper bounds from fishmethods::grotag
+        subs.a <- which(L1>(coef.subs[[it.ini]][1]*alpha)
+                        & L1<(coef.subs[[it.ini]][2]*alpha)
+                        & deltaT>median(deltaT))
+        # if (length(subs.a)==0){ # empty subset
+        #   subs.a <- which(L1>(0.7*alpha) & L1<(1.3*alpha) & deltaT>median(deltaT))
+        # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
+        subs.b <- which(L1>(coef.subs[[it.ini]][1]*beta)
+                        & L1<(coef.subs[[it.ini]][2]*beta)
+                        & deltaT>median(deltaT))
+        # if (length(subs.b)==0){ # empty subset
+        #   subs.b <- which(L1>(0.5*beta) & L1<(1.3*beta) & deltaT>median(deltaT))
+        # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
         
-        if (meth=='nlminb'){
-          opt1 <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
-                        alpha=alpha,beta=beta,L1=L1,L2=L2,deltaT=deltaT,
-                        tol.sd=tol.sd)
-          opt1$value <- opt1$obj
-        } else if (meth=='L-BFGS-B'){
-          opt1 <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
-                       method='L-BFGS-B',hessian=F, # compute hess if compute.se=T
-                       alpha=alpha,beta=beta,L1=L1,L2=L2,deltaT=deltaT,
-                       tol.sd=tol.sd)
+        if (length(subs.a)==0 | length(subs.b)==0){ # empty subset, no ini
+          optval1 <- optval0 # no improvement, stop
+        } else { # subsets not empty, ini computable
+          deltaL <- as.numeric(L2-L1)
+          ga.ini <- mean(deltaL[subs.a]/deltaT[subs.a])
+          gb.ini <- mean(deltaL[subs.b]/deltaT[subs.b])
+          par.ini <- c(ga.ini, gb.ini, 0) # hardcoded ini value for nu, log scale
+          
+          lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log
+          ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log
+          # ^ lower and upper bounds adapted from fishmethods::grotag
+          
+          if (meth=='nlminb'){
+            opt1 <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
+                           alpha=alpha,beta=beta,
+                           L1=L1,L2=L2,deltaT=deltaT,
+                           sdfunc=sdfunc,tol.sd=tol.sd)
+            opt1$value <- opt1$obj
+          } else if (meth=='L-BFGS-B'){
+            opt1 <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
+                          method='L-BFGS-B',hessian=F, # compute hess if compute.se=T
+                          alpha=alpha,beta=beta,
+                          L1=L1,L2=L2,deltaT=deltaT,
+                          sdfunc=sdfunc,tol.sd=tol.sd)
+          }
+          optval1 <- opt1$value
         }
-        optval1 <- opt1$value
+        it.ini <- it.ini+1L
       }
-      it.ini <- it.ini+1L
+      
+      if (optval1>optval0){ # then last coef.subs worse than previous
+        opt1 <- opt0
+      }
+      if (opt1$val<opt$value){
+        opt <- opt1 # overwrite if any improvement over first
+      }
+    } else { # then use my better ini, no subsets
+      # ini for ga and gb based on Linf = max obs length at recap, and K = vB eq
+      # for obs lengths with deltaT closest to 1 and using Linf = max obs length
+      
+      ind.dt1 <- which.min(abs(deltaT-1)) # obs with deltaT closest to 1
+      ga.ini <- (max(L2)-alpha)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
+      gb.ini <- (max(L2)-beta)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
+      par.ini <- c(ga.ini, gb.ini, 0) # hardcoded ini value for nu, log scale
+      
+      lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log
+      ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log
+      # ^ lower and upper bounds adapted from fishmethods::grotag
+      
+      if (meth=='nlminb'){
+        opt1 <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
+                       alpha=alpha,beta=beta,
+                       L1=L1,L2=L2,deltaT=deltaT,
+                       sdfunc=sdfunc,tol.sd=tol.sd)
+        opt1$value <- opt1$obj
+      } else if (meth=='L-BFGS-B'){
+        opt1 <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
+                      method='L-BFGS-B',hessian=F, # compute hess if compute.se=T
+                      alpha=alpha,beta=beta,
+                      L1=L1,L2=L2,deltaT=deltaT,
+                      sdfunc=sdfunc,tol.sd=tol.sd)
+      }
+      
+      if (opt1$val < opt$val){ # then improves over first opt with supplied ini
+        opt <- opt1
+      }
     }
-    
-    if (optval1>optval0){ # then last coef.subs worse than previous
-      opt1 <- opt0
-    }
-    if (opt1$val<opt$value){
-      opt <- opt1 # overwrite if any improvement over first
-    }
-    
   } # otherwise only use supplied par as ini
-
+  
+  
   ### optional: compute standard errors
   if (compute.se){
-    # suppressWarnings(hess <- try(optimHess(par=opt$par,fn=nll,
-    #                                        alpha=alpha,beta=beta,L1=L1,L2=L2,
-    #                                        deltaT=deltaT,tol.sd=tol.sd),T))
-    # if (is(hess,'try-error')){ # likely failed because of nu hitting lb
     hess <- optimHess(par=opt$par[1:2],
-                      fn=function(ga.gb,nu,alpha,beta,deltaT,L1,L2,tol.sd){
-                        nll(c(ga.gb,nu),alpha,beta,deltaT,L1,L2,tol.sd)},
+                      fn=function(ga.gb,nu,alpha,beta,deltaT,L1,L2,sd,tol.sd){
+                        nll(c(ga.gb,nu),alpha,beta,deltaT,L1,L2,sd,tol.sd)},
                       nu=opt$par[3],alpha=alpha,beta=beta,L1=L1,L2=L2,
-                      deltaT=deltaT,tol.sd=tol.sd)
+                      deltaT=deltaT,sd=sdfunc,tol.sd=tol.sd)
     # } # ^ Hessian wrt ga and gb only, nu held fixed, more stable
     ga <- opt$par[1]
     gb <- opt$par[2]
@@ -1026,6 +1091,7 @@ fr88 <- function(par,L1,L2,deltaT,try.many.ini=T,meth='nlminb',
               'alpha'=alpha,'beta'=beta)
   names(res$par) <- c('Linf','K')
   names(res$se) <- c('Linf','K')
+  
   return(res)
 }
 
