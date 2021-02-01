@@ -18,7 +18,14 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.3.2. Changelog since last version:
+This is GrowthEstimation version 0.4. Changelog since last version:
+* Francis (1988) estimation method fr88:
+  - completely re-coded, now follows closely orginal specification in Francis (1988), notably the optional estimation of nu, m, and p
+  - old fr88 function renamed oldfr88 for comparison, will likely be deprecated in future versions
+  - new fr88 requires three new arguments par.nu, par.m, and par.p which are user-supplied initial values; if left NULL (default), then corresponding "component" disabled
+  - new output AIC for model selection
+
+Changelog v0.3.2:
 * Francis (1988) estimation method fr88:
   - estimation of nu param now on log scale
   - added my own initial values for g.alpha and g.beta, as good as multiple subsets yet faster than ini from fishmethods::grotag

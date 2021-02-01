@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.3.2 ####
+#### GrowthEstimation v0.4 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -873,7 +873,372 @@ ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 
 
 #///////////////////////////////////////////////////////////////////////////////
-#### fr88: Francis (1988) ####
+#### fr88: "standard" Francis (1988) full, with min AIC for best sub-model ####
+#///////////////////////////////////////////////////////////////////////////////
+
+fr88 <- function(par,L1,L2,deltaT,
+                    par.nu=NULL,par.m=NULL,par.p=NULL,
+                    meth='nlminb',try.good.ini=T,compute.se=T,tol.sd=1e-5){
+  # par=(Linf,K) argument now necessary, used as first ini to try and only one
+  # if try.good.ini=F
+  
+  # par.nu, par.m ,par.p determine any additional "component" of the model. By
+  # default, leaving all three NULL fits a Fabens model (with error sd s) with
+  # Francis' reparametrization in terms of g_alpha and g_beta. Providing a
+  # numerical value for any of the three enables that "component" and uses the 
+  # suplied value as ini.
+  
+  if (meth!='nlminb'){stop('Only "nlminb" allowed for meth for now.')}
+  
+  ### setup
+  alpha <- as.numeric(quantile(L1,0.1))
+  beta <- as.numeric(quantile(L1,0.9))
+  
+  par.ini <- c((par[1]-alpha)*(1-exp(-par[2])), # g.alpha
+               (par[1]-beta)*(1-exp(-par[2])),  # g.beta
+               0)                               # log(nu)
+  # ^ transform (Linf,K) into (ga,gb), hardcoded ini value for s on log scale,
+  #   and then append below extra ini among c(log(nu), m, logit(p))
+  
+  ### objective function: enable components according to par.nu, par.m, par.p
+  if (is.null(par.nu)){ # then no additive variance term nu*E[deltaL]
+    if (is.null(par.m)){ # then no "measurement error" additive term m on mean
+      if (is.null(par.p)){ # then no mixture
+        # model: ga, gb, s
+        names.par <- c('g_alpha','g_beta','log(s)')
+        
+        untransfo <- function(x){exp(x[3])}
+        names.otherpar <- 's'
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          
+          nll <- -sum(dnorm(x=L2-L1, mean=mean.dL, sd=s, log=T))
+          
+          return(nll) # negloglik
+        }
+      } else { # mixture model with "contamination" uniform within deltaL range
+        # model: ga, gb, s, p
+        par.ini <- c(par.ini, log(par.p/(1-par.p))) # logit transfo
+        
+        names.par <- c('g_alpha','g_beta','log(s)','logit(p)')
+        
+        untransfo <- function(x){c(exp(x[3]), 1/(1+exp(-x[4])))}
+        names.otherpar <- c('s','p')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), logit(p))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          p <- 1/(1+exp(-par[4])) # inv logit transfo
+          
+          dL <- L2-L1
+          range.dL <- max(dL)-min(dL) # R in Francis' eq. (9)
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          
+          pllvec <- log((1-p)*dnorm(x=dL,mean=mean.dL,sd=s,log=F) + p/range.dL)
+          # ^ mixture: (1-p) Gaussian + p uniform [min deltaL, max deltaL]
+          
+          return(-sum(pllvec)) # negloglik
+        }
+      }
+    } else { # "measurement error" additive term m on scale of E[deltaL]
+      if (is.null(par.p)){ # then no mixture
+        # model: ga, gb, s, m
+        par.ini <- c(par.ini, par.m) # no transfo
+        
+        names.par <- c('g_alpha','g_beta','log(s)','m')
+        
+        untransfo <- function(x){c(exp(x[3]), x[4])}
+        names.otherpar <- c('s','m')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), m)
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          m <- par[4] # "bias" in E[deltaL], Francis' lambda_i
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          
+          nll <- -sum(dnorm(x=L2-L1, mean=mean.dL+m, sd=s, log=T))
+          
+          return(nll) # negloglik
+        }
+      } else { # fit a mixture model with "contamination" uniform within [minL,maxL]
+        # model: ga, gb, s, m, p
+        par.ini <- c(par.ini, par.m, log(par.p/(1-par.p)))
+        # ^ no transfo for m, logit transfo for p
+        
+        names.par <- c('g_alpha','g_beta','log(s)','m','logit(p)')
+        
+        untransfo <- function(x){c(exp(x[3]), x[4], 1/(1+exp(-x[5])))}
+        names.otherpar <- c('s','m','p')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), m, logit(p))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          m <- par[4] # "bias" in E[deltaL], Francis' lambda_i
+          p <- 1/(1+exp(-par[5])) # inv logit
+          
+          dL <- L2-L1
+          range.dL <- max(dL)-min(dL) # R in Francis' eq. (9)
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          
+          pllvec <- log((1-p)*dnorm(x=dL,mean=mean.dL+m,sd=s,log=F) + p/range.dL)
+          # ^ mixture: (1-p) Gaussian + p uniform [min deltaL, max deltaL]
+          
+          return(-sum(pllvec)) # negloglik
+        }
+      }
+    }
+  } else { # additive variance term prop to E[deltaL]
+    if (is.null(par.m)){ # then no "measurement error" additive term m on mean
+      if (is.null(par.p)){ # then no mixture
+        # model: ga, gb, s, nu
+        par.ini <- c(par.ini, log(par.nu)) # log transfo
+        
+        names.par <- c('g_alpha','g_beta','log(s)','log(nu)')
+        
+        untransfo <- function(x){c(exp(x[3]), exp(x[4]))}
+        names.otherpar <- c('s','nu')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), log(nu))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          nu <- exp(par[4]) # "growth variability", heteroscedatic errors
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          posmean.dL <- ifelse(mean.dL>0, mean.dL, tol.sd) # for neg growth
+          
+          nll <- -sum(dnorm(x=L2-L1, mean=mean.dL, sd=s+nu*posmean.dL, log=T))
+          # ^ affine variance function, Francis' eq. (5)
+          
+          return(nll) # negloglik
+        }
+      } else { # fit a mixture model with "contamination" uniform within [minL,maxL]
+        # model: ga, gb, s, nu, p
+        par.ini <- c(par.ini, log(par.nu), log(par.p/(1-par.p)))
+        # ^ log transfo for nu, logit transfo for p
+        
+        names.par <- c('g_alpha','g_beta','log(s)','log(nu)','logit(p)')
+        
+        untransfo <- function(x){c(exp(x[3]), exp(x[4]), 1/(1+exp(-x[5])))}
+        names.otherpar <- c('s','nu','p')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), log(nu), logit(p))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          nu <- exp(par[4]) # "growth variability", heteroscedatic errors
+          p <- 1/(1+exp(-par[5])) # inv logit
+          
+          dL <- L2-L1
+          range.dL <- max(dL)-min(dL) # R in Francis' eq. (9)
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          posmean.dL <- ifelse(mean.dL>0, mean.dL, tol.sd) # for neg growth
+          
+          pllvec <- log((1-p)*dnorm(x=dL,mean=mean.dL,sd=s+nu*posmean.dL,log=F) +
+                          + p/range.dL)
+          # ^ mixture: (1-p) Gaussian + p uniform [min deltaL, max deltaL]
+          
+          return(-sum(pllvec)) # negloglik
+        }
+      }
+    } else { # "measurement error" additive term m on scale of E[deltaL]
+      if (is.null(par.p)){ # then no mixture
+        # model: ga, gb, s, nu, m
+        par.ini <- c(par.ini, log(par.nu), par.m)
+        # ^ log transfo for nu, no transfo for m
+        
+        names.par <- c('g_alpha','g_beta','log(s)','log(nu)','m')
+        
+        untransfo <- function(x){c(exp(x[3]), exp(x[4]), x[5])}
+        names.otherpar <- c('s','nu','m')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), log(nu), m)
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          nu <- exp(par[4]) # "growth variability", heteroscedatic errors
+          m <- par[5] # "bias" in E[deltaL], Francis' lambda_i
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          posmean.dL <- ifelse(mean.dL>0, mean.dL, tol.sd) # for neg growth
+          
+          nll <- -sum(dnorm(x=L2-L1, mean=mean.dL+m, sd=s+nu*posmean.dL, log=T))
+          # ^ affine variance function, Francis' eq. (5)
+          
+          return(nll) # negloglik
+        }
+      } else { # fit a mixture model with "contamination" uniform within [minL,maxL]
+        # full model: ga, gb, s, nu, m, p
+        par.ini <- c(par.ini, log(par.nu), par.m, log(par.p/(1-par.p)))
+        # ^ log transfo for nu, no transfo for m, logit transfo for p
+        
+        names.par <- c('g_alpha','g_beta','log(s)','log(nu)','m','logit(p)')
+        
+        untransfo <- function(x){c(exp(x[3]), exp(x[4]), x[5], 1/(1+exp(-x[6])))}
+        names.otherpar <- c('s','nu','m','p')
+        
+        nll <- function(par,alpha,beta,L1,L2,deltaT,tol.sd){
+          # par=c(ga, gb, log(s), log(nu), m, logit(p))
+          ga <- par[1] # > 0 but generally far away enough from 0
+          gb <- par[2] # > 0 but generally far away enough from 0
+          s <- exp(par[3]) # est on log scale because > 0
+          
+          nu <- exp(par[4]) # "growth variability", heteroscedatic errors
+          m <- par[5] # "bias" in E[deltaL], Francis' lambda_i
+          p <- 1/(1+exp(-par[6])) # inv logit
+          
+          dL <- L2-L1
+          range.dL <- max(dL)-min(dL) # R in Francis' eq. (9)
+          
+          Linf <- (beta*ga-alpha*gb)/(ga-gb)
+          expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
+          mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
+          posmean.dL <- ifelse(mean.dL>0, mean.dL, tol.sd) # for neg growth
+          
+          pllvec <- log((1-p)*dnorm(x=dL,mean=mean.dL+m,sd=s+nu*posmean.dL,log=F) +
+                          + p/range.dL)
+          # ^ mixture: (1-p) Gaussian + p uniform [min deltaL, max deltaL]
+          
+          return(-sum(pllvec)) # negloglik
+        }
+      }
+    }
+  }
+  
+  
+  ### optimization with supplied par ini
+  opt <- try(nlminb(start=par.ini,objective=nll,
+                    alpha=alpha,beta=beta,
+                    L1=L1,L2=L2,deltaT=deltaT,
+                    tol.sd=tol.sd),T)
+  if (class(opt)=='try-error'){
+    # opt$value <- Inf # so comparison with other loglik succeeds below
+    warning('Supplied ini failed in nlminb, trying other ini.')
+  } else {
+    opt$value <- opt$obj
+  }
+  
+
+  ### optional: try many different starting values, opt actually not convex
+  if (try.good.ini | class(opt)=='try-error'){
+    # then use my better ini, no subsets
+    # ini for ga and gb based on Linf = max obs length at recap, and K = vB eq
+    # for obs lengths with deltaT closest to 1 and using Linf = max obs length
+    
+    ind.dt1 <- which.min(abs(deltaT-1)) # obs with deltaT closest to 1
+    ga.ini <- (max(L2)-alpha)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
+    gb.ini <- (max(L2)-beta)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
+    par.ini1 <- par.ini
+    par.ini1[1:2] <- c(ga.ini, gb.ini)
+    # ^ change only ini for g_alpha and g_beta, keep others as supplied
+    
+    opt1 <- nlminb(start=par.ini1,objective=nll,
+                   alpha=alpha,beta=beta,
+                   L1=L1,L2=L2,deltaT=deltaT,
+                   tol.sd=tol.sd)
+    opt1$value <- opt1$obj
+    
+    if (class(opt)=='try-error'){ # then replace
+      opt <- opt1
+    } else { # then need improvement in loglik to replace
+      if (opt1$val < opt$val){ # then improves over first opt with supplied ini
+        opt <- opt1
+      }
+    }
+  } # otherwise only fit with supplied par as ini
+  
+  
+  ### optional: compute standard errors
+  if (compute.se){
+    other.par <- opt$par[3:length(par.ini)] # all except g_alpha and g_beta
+    hess <- optimHess(par=opt$par[1:2],
+                      fn=function(ga.gb, other.par, alpha, beta,
+                                  L1, L2, deltaT, tol.sd){
+                        nll(c(ga.gb,other.par),alpha,beta,L1,L2,deltaT,tol.sd)
+                      },other.par=other.par, alpha=alpha, beta=beta,
+                      L1=L1, L2=L2, deltaT=deltaT, tol.sd=tol.sd)
+    # ^ Hessian wrt ga and gb only, all other pars held fixed, more stable
+    ga <- opt$par[1]
+    gb <- opt$par[2]
+    jac.g <- cbind(c(gb*(alpha-beta)/(ga-gb)^2,   # jacobian of transformation
+                     -1/(ga-gb+alpha-beta)),      # from (ga,gb) to (Linf,K) 
+                   c(-ga*(alpha-beta)/(ga-gb)^2,
+                     1/(ga-gb+alpha-beta)))
+    # lazy: numerical Hessian instead of analytical Fisher info of (ga,gb,...)
+    # (same laziness as in fishmethods::grotag)
+    varcov <- t(jac.g)%*%solve(hess[1:2,1:2])%*%jac.g # delta method
+    # ^ other pars ignored in varcov, because Hessian rarely pos def with them
+    se <- sqrt(diag(varcov))
+  } else {
+    hess <- NA
+    se <- c(NA,NA)
+  }
+  
+  ### output
+  Linf <- (beta*opt$par[1] - alpha*opt$par[2])/(opt$par[1]-opt$par[2])
+  K <- -log(1+(opt$par[1]-opt$par[2])/(alpha-beta))
+  
+  names(opt$par) <- names.par # all transformed param in optim
+  
+  otherpar <- untransfo(opt$par) # all other par except ga and gb
+  names(otherpar) <- names.otherpar
+  
+  res <- list('par'=c(Linf,K),'se'=se,
+              'other.par'=otherpar, # no se for other par for now
+              'value'=opt$val,'AIC'=2*opt$val+2*length(par.ini),
+              'original.par'=opt$par,'hessian'=hess,
+              'alpha'=alpha,'beta'=beta,
+              'conv'=opt$mess)
+  names(res$par) <- c('Linf','K')
+  names(res$se) <- c('Linf','K')
+  
+  return(res)
+}
+
+
+
+
+#///////////////////////////////////////////////////////////////////////////////
+#### oldfr88: Francis (1988) following old paradigm ####
 #///////////////////////////////////////////////////////////////////////////////
 
 # Notes:
@@ -885,7 +1250,7 @@ ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 #   numerical Hessian and delta method for (Linf,K). Since estimates not
 #   consistent, delta method is probably returning garbage.
 
-fr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
+oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
                  try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
   # par argument now necessary, used as first ini to try and only one if
   # try.many.ini=F
