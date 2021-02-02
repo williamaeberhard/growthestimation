@@ -24,6 +24,7 @@ This is GrowthEstimation version 0.4. Changelog since last version:
   - old fr88 function renamed oldfr88 for comparison, will likely be deprecated in future versions
   - new fr88 requires three new arguments par.nu, par.m, and par.p which are user-supplied initial values; if left NULL (default), then corresponding "component" disabled
   - new output AIC for model selection
+  - new wrapper function fr88.minAIC: fits multiple fr88 models with increasing complexity (adding one param at a time among nu, m, and p) and returns the best model in terms of min AIC along with character string specifying which sub-model it is (output $best.model)
 
 Changelog v0.3.2:
 * Francis (1988) estimation method fr88:

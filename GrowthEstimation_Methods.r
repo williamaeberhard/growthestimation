@@ -1235,6 +1235,112 @@ fr88 <- function(par,L1,L2,deltaT,
 }
 
 
+### wrapper for fr88 with model selection by min AIC
+fr88.minAIC <- function(par,L1,L2,deltaT,
+                        meth='nlminb',try.good.ini=T,
+                        compute.se=T,tol.sd=1e-5){
+  # could be improved by setting compute.se=F for all candidate models and
+  # separate se comp without estim
+  
+  # Step 1: m1 = equiv to Fabens, baseline model
+  fit <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+              par.nu=NULL,par.m=NULL,par.p=NULL,
+              meth=meth,try.good.ini=try.good.ini,
+              compute.se=compute.se,tol.sd=tol.sd) # equiv to Fabens
+  # fit <- m1
+  
+  # Step 2: m2 = m1 + 1 param among 3 possible (nu, m, and p)
+  m2 <- vector('list',3)
+  m2[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                  par.nu=ini.nu,par.m=NULL,par.p=NULL,
+                  meth=meth,try.good.ini=try.good.ini,
+                  compute.se=compute.se,tol.sd=tol.sd)
+  m2[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                  par.nu=NULL,par.m=ini.m,par.p=NULL,
+                  meth=meth,try.good.ini=try.good.ini,
+                  compute.se=compute.se,tol.sd=tol.sd)
+  m2[[3]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                  par.nu=NULL,par.m=NULL,par.p=ini.p,
+                  meth=meth,try.good.ini=try.good.ini,
+                  compute.se=compute.se,tol.sd=tol.sd)
+  
+  if (min(sapply(m2,'[[','AIC')) < fit$AIC){
+    bestm2 <- which.min(sapply(m2,'[[','AIC'))
+    fit <- m2[[bestm2]]
+    # message('m2 improves over m1')
+    
+    # Step 3: m3 = m2 + 1 param among 2 remaining
+    if (bestm2==1){
+      # nu in m2, choice among m and p for m3
+      m3 <- vector('list',2)
+      m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=ini.nu,par.m=ini.m,par.p=NULL,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+      m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=ini.nu,par.m=NULL,par.p=ini.p,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+    } else if (bestm2==2){
+      # m in m2, choice among nu and p for m3
+      m3 <- vector('list',2)
+      m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=ini.nu,par.m=ini.m,par.p=NULL,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+      m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=NULL,par.m=ini.m,par.p=ini.p,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+    } else {
+      # p in m2, choice among nu and m for m3
+      m3 <- vector('list',2)
+      m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=ini.nu,par.m=NULL,par.p=ini.p,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+      m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                      par.nu=NULL,par.m=ini.m,par.p=ini.p,
+                      meth=meth,try.good.ini=try.good.ini,
+                      compute.se=compute.se,tol.sd=tol.sd)
+    }
+    
+    if (min(sapply(m3,'[[','AIC')) < fit$AIC){
+      bestm3 <- which.min(sapply(m3,'[[','AIC'))
+      fit <- m3[[bestm3]]
+      # message('m3 improves over m2')
+      
+      # Step 4: m4 = full model
+      m4 <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                 par.nu=ini.nu,par.m=ini.m,par.p=ini.p,
+                 meth=meth,try.good.ini=try.good.ini,
+                 compute.se=compute.se,tol.sd=tol.sd)
+      
+      if (m4$AIC < fit$AIC){
+        fit <- m4
+        # message('m4 improves over m3')
+        bestmodel.charstr <- '(ga,gb,s) + (nu,m,p)'
+        message('Best (smallest AIC) fr88 model: full with ',bestmodel.charstr)
+      } else {
+        # message('stick to m3')
+        bestmodel.charstr <- paste0('(ga,gb,s) + (',c('nu','m','p')[bestm2],',',
+                                    c('nu','m','p')[-bestm2][bestm3],')')
+        message('Best (smallest AIC) fr88 model: ',bestmodel.charstr)
+      }
+    } else {
+      # message('stick to m2')
+      bestmodel.charstr <- paste0('(ga,gb,s) + (',c('nu','m','p')[bestm2],')')
+      message('Best (smallest AIC) fr88 model: ',bestmodel.charstr)
+    }
+  } else {
+    # message('stick to m1')
+    bestmodel.charstr <- '(ga,gb,s)'
+    message('Best (smallest AIC) fr88 model: simplest with only ',bestmodel.charstr)
+  }
+  return(c(fit,'best.model'=bestmodel.charstr))
+}
+
+
 
 
 #///////////////////////////////////////////////////////////////////////////////
