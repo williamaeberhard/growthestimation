@@ -1237,6 +1237,7 @@ fr88 <- function(par,L1,L2,deltaT,
 
 ### wrapper for fr88 with model selection by min AIC
 fr88.minAIC <- function(par,L1,L2,deltaT,
+                        par.nu,par.m,par.p,
                         meth='nlminb',try.good.ini=T,
                         compute.se=T,tol.sd=1e-5){
   # could be improved by setting compute.se=F for all candidate models and
@@ -1252,15 +1253,15 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
   # Step 2: m2 = m1 + 1 param among 3 possible (nu, m, and p)
   m2 <- vector('list',3)
   m2[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                  par.nu=ini.nu,par.m=NULL,par.p=NULL,
+                  par.nu=par.nu,par.m=NULL,par.p=NULL,
                   meth=meth,try.good.ini=try.good.ini,
                   compute.se=compute.se,tol.sd=tol.sd)
   m2[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                  par.nu=NULL,par.m=ini.m,par.p=NULL,
+                  par.nu=NULL,par.m=par.m,par.p=NULL,
                   meth=meth,try.good.ini=try.good.ini,
                   compute.se=compute.se,tol.sd=tol.sd)
   m2[[3]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                  par.nu=NULL,par.m=NULL,par.p=ini.p,
+                  par.nu=NULL,par.m=NULL,par.p=par.p,
                   meth=meth,try.good.ini=try.good.ini,
                   compute.se=compute.se,tol.sd=tol.sd)
   
@@ -1274,33 +1275,33 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
       # nu in m2, choice among m and p for m3
       m3 <- vector('list',2)
       m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=ini.nu,par.m=ini.m,par.p=NULL,
+                      par.nu=par.nu,par.m=par.m,par.p=NULL,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
       m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=ini.nu,par.m=NULL,par.p=ini.p,
+                      par.nu=par.nu,par.m=NULL,par.p=par.p,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
     } else if (bestm2==2){
       # m in m2, choice among nu and p for m3
       m3 <- vector('list',2)
       m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=ini.nu,par.m=ini.m,par.p=NULL,
+                      par.nu=par.nu,par.m=par.m,par.p=NULL,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
       m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=NULL,par.m=ini.m,par.p=ini.p,
+                      par.nu=NULL,par.m=par.m,par.p=par.p,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
     } else {
       # p in m2, choice among nu and m for m3
       m3 <- vector('list',2)
       m3[[1]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=ini.nu,par.m=NULL,par.p=ini.p,
+                      par.nu=par.nu,par.m=NULL,par.p=par.p,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
       m3[[2]] <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                      par.nu=NULL,par.m=ini.m,par.p=ini.p,
+                      par.nu=NULL,par.m=par.m,par.p=par.p,
                       meth=meth,try.good.ini=try.good.ini,
                       compute.se=compute.se,tol.sd=tol.sd)
     }
@@ -1312,7 +1313,7 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
       
       # Step 4: m4 = full model
       m4 <- fr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
-                 par.nu=ini.nu,par.m=ini.m,par.p=ini.p,
+                 par.nu=par.nu,par.m=par.m,par.p=par.p,
                  meth=meth,try.good.ini=try.good.ini,
                  compute.se=compute.se,tol.sd=tol.sd)
       
