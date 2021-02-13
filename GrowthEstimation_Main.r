@@ -1,6 +1,6 @@
-#/////////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data v0.4 ####
-#/////////////////////////////////////////////////////////////////
+#///////////////////////////////////////////////////////////////////
+#### GrowthEstimation: compare methods on simulated data v0.4.1 ####
+#///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
 
@@ -11,10 +11,12 @@ require(tmbstan)
 #   Bla02 and zh09
 
 compile("FabensBayesian.cpp") # only need to run once
+compile("FrancisBayesian.cpp") # only need to run once
 compile("Laslett.cpp") # only need to run once
 compile("Zhang.cpp") # only need to run once
 
 dyn.load(dynlib("FabensBayesian")) # to run for every new R session
+dyn.load(dynlib("FrancisBayesian")) # to run for every new R session
 dyn.load(dynlib("Laslett")) # to run for every new R session
 dyn.load(dynlib("Zhang")) # to run for every new R session
 
@@ -24,11 +26,12 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 # Available functions are:
 #  - gh59: Gulland and Holt (1959)
 #  - fa65: Fabens (1965)
-#  - fr88: Francis (1988)
+#  - fr88: Francis (1988), with fr88.minAIC for selecting best sub-model
 #  - ja91: James (1991)
 #  - la02: Laslett, Eveson and Polacheck (2002)
 #  - zh09: Zhang, Lessard and Campbell (2009), Bayesian
 #  - Bfa65: Bayesian version of Fabens (1965)
+#  - Br88: Bayesian version of Francis (1988), "our take"
 #  - Bla02: Bayesian version of Laslett, Eveson and Polacheck (2002)
 
 # All methods take the exact same mandatory arguments:

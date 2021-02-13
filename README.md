@@ -18,7 +18,11 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.4. Changelog since last version:
+This is GrowthEstimation version 0.4.1. Changelog since last version:
+* 
+
+
+Changelog v0.4:
 * Francis (1988) estimation method fr88:
   - completely re-coded, now follows closely orginal specification in Francis (1988), notably the optional estimation of nu, m, and p
   - old fr88 function renamed oldfr88 for comparison, will likely be deprecated in future versions

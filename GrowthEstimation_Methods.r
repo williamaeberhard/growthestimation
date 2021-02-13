@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.4 ####
+#### GrowthEstimation v0.4.1 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -298,7 +298,6 @@ Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
 #### Bfa65: Bayesian Fabens (1965) ####
 #///////////////////////////////////////////////////////////////////////////////
 
-
 Bfa65 <- function(par,L1,L2,deltaT,
                   priordist.Linf='uniform',
                   priordist.K='uniform',
@@ -526,14 +525,6 @@ Bfa65 <- function(par,L1,L2,deltaT,
 #### zh09: Zhang, Lessard and Campbell (2009), Bayesian ####
 #///////////////////////////////////////////////////////////////////////////////
 
-# Notes:
-# * Estimation difficult, need many different random starting values.
-# * Model could be overparameterized, 3 random effects seems a bit overkill.
-# * Many parameters badly estimated: Linf overestimated, sdLinf underestimated,
-#   muA highly overestimated and sdeps overestimated.
-# * No noticeable impact of original priors, all fairly flat, but necessary to
-#   help numerical stability in estimation (rather than box constraints).
-
 zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
                  rand.ini=list(perform=F,'n'=10,'radius'=0.1),
                  onlyTMB=F,output.post.draws=F,lb.sd=NULL,enablepriors=1,
@@ -710,11 +701,6 @@ zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
 #### la02: Laslett, Eveson and Polacheck (2002) ####
 #///////////////////////////////////////////////////////////////////////////////
 
-# Notes:
-# * Mean of age at capture likely overestimated, with sd underestimated.
-# * Already with n=100 all estimates seem symmetric.
-# * Naive CIs on original scale cover too much.
-
 la02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',
                  compute.se=T,enable.priors=F,lb.sd=NULL){
   # uniform priors with user-supplied hyperparam
@@ -790,21 +776,6 @@ la02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',
 #### ja91: James (1991) ####
 #///////////////////////////////////////////////////////////////////////////////
 
-# Notes:
-# * This is the WLS from Section 2.2, presented as improved version of fa65.
-# * Original specification of Y_{1i} and Y_{2i} with indep epsi_1 and epsi_2
-#   leads to eta_i = epsi_{2i} - epsi_{1i}*exp(-K*deltaT), i.e. does not
-#   technically depend on Linf. So corresponding Var[eta_i] = sigma2*wi may not
-#   match a DGP where the original specification is satisfied.
-# * Consequence: wasn't able to find correct DGP to verify hand deriv with
-#   expectations.
-# * Consequence: computed s.e. may corespond to nothing. They generally
-#   overestimate the empirical s.e. under best guess of DGP (which is: generate
-#   Y1 and Y2 separately with iid additive Gaussian mean 0 and var sigma2).
-# * With large sigma2 (>0.4) and large K (>0.3): estimates of K highly
-#   right-skewed and overestimated s.e. of Linf but dramatically underestimated
-#   s.e. of K, even with large n. 
-
 ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function
   rss <- function(par,L1,L2,deltaT){
@@ -873,12 +844,285 @@ ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 
 
 #///////////////////////////////////////////////////////////////////////////////
+#### Bfr88: Bayesian Francis (1988), "our take" ####
+#///////////////////////////////////////////////////////////////////////////////
+
+Bfr88 <- function(par,L1,L2,deltaT,
+                  priordist.Linf='uniform',
+                  priordist.K='uniform',
+                  priordist.sigma='uniform',
+                  hyperpar=NULL,
+                  varfunc='constant',enablepriorsd=0L,
+                  meth='nlminb',compute.se=T,
+                  onlyTMB=F,output.post.draws=F,
+                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
+  
+  ### setup priors
+  
+  priordist.code <- integer(3) # codes for Linf, K, and sigma
+  
+  # prior for Linf
+  
+  if (priordist.Linf=='uniform'){
+    priordist.code[1] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="uniform" the 1st one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.Linf=='normal' | priordist.Linf=='Gaussian'){
+    priordist.code[1] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="normal" the 1st one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.Linf=='lognormal'){
+    priordist.code[1] <- 3L
+    hyperpar[[1]] <- c(2*log(hyperpar[[1]][1]) +
+                         - log(hyperpar[[1]][2]^2+hyperpar[[1]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[1]][1]) +
+                              + log(hyperpar[[1]][2]^2+hyperpar[[1]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.Linf="lognormal" the 1st one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[1] <- 0L
+  }
+  
+  # prior for K
+  
+  if (priordist.K=='uniform'){
+    priordist.code[2] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="uniform" the 2nd one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.K=='normal' | priordist.K=='Gaussian'){
+    priordist.code[2] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="normal" the 2nd one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.K=='lognormal'){
+    priordist.code[2] <- 3L
+    hyperpar[[2]] <- c(2*log(hyperpar[[2]][1]) +
+                         - log(hyperpar[[2]][2]^2+hyperpar[[2]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[2]][1]) +
+                              + log(hyperpar[[2]][2]^2+hyperpar[[2]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.K="lognormal" the 2nd one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[2] <- 0L
+  }
+  
+  # prior for sigma
+  
+  if (priordist.sigma=='uniform'){
+    priordist.code[3] <- 1L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="uniform" the 3rd one is a vector of ',
+           'length 2 of lower and upper bounds.')
+    }
+  } else if (priordist.sigma=='normal' | priordist.sigma=='Gaussian'){
+    priordist.code[3] <- 2L
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="normal" the 3rd one is a vector of ',
+           'length 2 of mean and sd.')
+    }
+  } else if (priordist.sigma=='lognormal'){
+    priordist.code[3] <- 3L
+    hyperpar[[3]] <- c(2*log(hyperpar[[3]][1]) +
+                         - log(hyperpar[[3]][2]^2+hyperpar[[3]][1]^2)/2,
+                       sqrt(-2*log(hyperpar[[3]][1]) +
+                              + log(hyperpar[[3]][2]^2+hyperpar[[3]][1]^2)))
+    # ^ mean and sd on log scale, user supplies mean and sd on exp scale
+    if (!is.list(hyperpar)){ # is.null(hyperpar) # NULL is not a list
+      stop('hyperpar must be supplied as a list of 3 elements (Linf, K, sigma)',
+           ', where for priordist.sigma="lognormal" the 3rd one is a vector of ',
+           'length 2 of mean and sd on the original (exponential) scale.')
+    }
+  } else { # then no prior specified, straight frequentist Fabens, no MCMC
+    priordist.code[3] <- 0L
+  }
+  
+  if (any(priordist.code==0L) & !all(priordist.code==0L)){
+    warning('At least one prior distribution specified, but not for all three ',
+            'Linf, K, and sigma, so reverting to TMB estimation only and no MCMC.')
+  }
+  
+  ### setup varfunc code
+  
+  if (varfunc=='constant'){
+    varfunc.code <- 0L
+  } else if (varfunc=='prop.dL'){
+    varfunc.code <- 1L
+  } else if (varfunc=='prop.dT'){
+    varfunc.code <- 2L
+  } else if (varfunc=='prop.L2'){
+    varfunc.code <- 3L
+  } else if (varfunc=='exp.dL'){
+    varfunc.code <- 4L
+  } else if (varfunc=='exp.L2'){
+    varfunc.code <- 5L
+  } else if (varfunc=='pow.dL'){
+    varfunc.code <- 6L
+  } else if (varfunc=='pow.L2'){
+    varfunc.code <- 7L
+  } else {
+    stop('varfunc must be one of: "constant", "prop.dL", "prop.dT", "prop.L2",',
+         ' "exp.dL", "exp.L2", "pow.dL", or "pow.L2".')
+  }
+  
+  ### setup
+  if (meth!='nlminb'){warning('Only meth="nlminb" supported for now.')}
+  # if (!compute.se){warning('se will be computed anyway.')}
+  
+  # n <- length(L1)
+  
+  datalist <- list('L1'=L1,'L2'=L2,
+                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
+                   'hp_Linf'=hyperpar[[1]],  # user-supplied
+                   'hp_K'=hyperpar[[2]],     # user-supplied
+                   'hp_sigma'=hyperpar[[3]], # user-supplied
+                   'priordist'=priordist.code, # as of v0.2.1: vector dim 3
+                   'priorsd'=as.integer(enablepriorsd), # 0=disabled, 1=enabled
+                   'varfunc'=varfunc.code
+  )
+  parlist <- list('logLinf'=log(par[1]),
+                  'logK'=log(par[2]),
+                  'logsigma'=0, # "intercept" in error sd
+                  'logsda'=-1,'logsdb'=-1 # multiplicative terms, smallish
+  )
+  
+  ### TMB estimation (good for ini MCMC and as benchmark)
+  
+  if (varfunc.code==0L){ # constant
+    obj <- MakeADFun(data=datalist,parameters=parlist,
+                     map=list('logsda'=factor(NA),'logsdb'=factor(NA)),
+                     # ^ do not estimate sda and sdb
+                     DLL="FrancisBayesian",silent=T)
+  }  else if (varfunc.code%in%c(1L,2L,3L)){ # prop.dL, prop.dT, prop.L2
+    obj <- MakeADFun(data=datalist,parameters=parlist,
+                     map=list('logsdb'=factor(NA)),
+                     # ^ do not estimate sdb
+                     DLL="FrancisBayesian",silent=T)
+  } else { # exp.dL, exp.L2, pow.dL, pow.L2
+    obj <- MakeADFun(data=datalist,parameters=parlist,
+                     DLL="FrancisBayesian",silent=T)
+  }
+  
+  opt <- nlminb(start=obj$par,obj=obj$fn,gr=obj$gr,
+                control=list(eval.max=5000,iter.max=5000))
+  theta.tmb <- exp(opt$par[1:2]) # naive estimates without sdreport()
+  
+  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
+  if (!onlyTMB & all(priordist.code!=0)){
+    mcmc.obj <- tmbstan(obj=obj,
+                        lower=rep(-Inf,length(opt$par)),
+                        upper=rep(Inf,length(opt$par)),
+                        silent=T,laplace=F,
+                        chains=mcmc.control$nchains,
+                        warmup=mcmc.control$warmup,
+                        iter=mcmc.control$iter,
+                        control=list(adapt_delta=0.99, # def=0.8, larger=safer
+                                     max_treedepth=15), # def=10, larger helps
+                        # init='random'
+                        init='last.par.best' # start from MLE above
+    )
+    
+    # traceplot(mcmc.obj, pars=names(obj$par), inc_warmup=TRUE) # check conv
+    # pairs(mcmc.obj, pars=names(obj$par)) # post dist and scatterplots
+    # # ^ Linf and K typically correlate a lot (negatively)
+    
+    # extract MCMC post draws for derived quantities specified in obj's REPORT
+    mcmc.post <- as.matrix(mcmc.obj)
+    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
+    for (i in 1:nrow(mcmc.post)){
+      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('Linf','K')])
+    }
+    # colMeans(mcmc.est) # post means for Linf and K
+    
+    res <- list('par'=c(median(mcmc.est[,1]),median(mcmc.est[,2])),
+                # 'par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
+                # ^ post median better, dist can be very skewed with small n
+                'par.TMB'=theta.tmb)
+    # ^ MCMC point estimates are posterior median as of v0.3.1
+    names(res$par) <- c('Linf','K')
+    names(res$par.TMB) <- c('Linf','K')
+  } else {
+    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb)
+    names(res$par.TMB) <- c('Linf','K')
+  }
+  
+  ### optional: compute standard errors
+  if (compute.se){
+    if (!onlyTMB & all(priordist.code!=0)){
+      # res$se <- c(sqrt(var(mcmc.est[,1])),sqrt(var(mcmc.est[,2])))
+      # ^ posterior naive se numerically unstable if low n
+      res$se <- c(median(abs(mcmc.est[,1]-res$par[1])),
+                  median(abs(mcmc.est[,2]-res$par[2]))) # MADAM
+      names(res$se) <- c('Linf','K')
+    } else {
+      res$se <- c(NA,NA)
+    }
+    rep <- sdreport(obj)
+    res$se.TMB <- summary(rep)[c('Linf','K'),2] # delta method std errors
+    names(res$se.TMB) <- c('Linf','K')
+  } else {
+    res$se.TMB <- c(NA,NA)
+    if (!onlyTMB){
+      res$se <- c(NA,NA)
+    }
+  }
+  
+  ### output
+  if (output.post.draws){
+    if (onlyTMB | any(priordist.code==0)){
+      warning('No posterior draws if onlyTMB=TRUE or not all priordist set.')
+    } else {
+      # res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
+      # res$post.draws <- as.list(mcmc.post)
+      res$post.draws <- list('Linf'=mcmc.est[,1],
+                             'K'=mcmc.est[,2])
+    }
+  }
+  
+  if (!onlyTMB & all(priordist.code!=0)){
+    res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
+                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
+    # ^ equal-tailed 95% credible intervals based on MCMC draws
+  }
+  
+  res$value.TMB <- opt$obj
+  res$conv.TMB <- opt$mess
+  res$AIC <- 2*opt$obj+2*length(opt$par)
+  
+  return(res)
+}
+
+
+
+
+
+#///////////////////////////////////////////////////////////////////////////////
 #### fr88: "standard" Francis (1988) full, with min AIC for best sub-model ####
 #///////////////////////////////////////////////////////////////////////////////
 
 fr88 <- function(par,L1,L2,deltaT,
-                    par.nu=NULL,par.m=NULL,par.p=NULL,
-                    meth='nlminb',try.good.ini=T,compute.se=T,tol.sd=1e-5){
+                 par.nu=NULL,par.m=NULL,par.p=NULL,
+                 meth='nlminb',try.good.ini=T,compute.se=T,tol.sd=1e-5){
   # par=(Linf,K) argument now necessary, used as first ini to try and only one
   # if try.good.ini=F
   
@@ -1348,15 +1592,6 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
 #### oldfr88: Francis (1988) following old paradigm ####
 #///////////////////////////////////////////////////////////////////////////////
 
-# Notes:
-# * Wasn't able to find a DGP that leads to unbiased estimates. Both Linf and K
-#   are biased, even asymptotically: Linf overestimated and K underestimated.
-# * Both estimates look normally distributed empirically, already with n=500.
-# * Sampling variance of estimates decreases with nu decreasing, but not bias.
-# * Problem of varcovar function not using asymptotic sandwich, but relying on
-#   numerical Hessian and delta method for (Linf,K). Since estimates not
-#   consistent, delta method is probably returning garbage.
-
 oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
                  try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
   # par argument now necessary, used as first ini to try and only one if
@@ -1385,7 +1620,7 @@ oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
       posdL <- ifelse(mean.dL>0, mean.dL, tol.sd) # in case of neg growth
       nll <- -sum(dnorm(x=L2-L1, mean=mean.dL, sd=nu*posdL, log=T))
     } else if (sdfunc=='prop.dT'){ # sd proportional to time at liberty
-      # cf. Francis (1988) remakrs in Intro on p. 43
+      # cf. Francis (1988) remarks in Intro on p. 43
       mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
       nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu*deltaT, log=T))
     } else {
@@ -1572,11 +1807,6 @@ oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
 #### fa65: Fabens (1965) ####
 #///////////////////////////////////////////////////////////////////////////////
 
-# Notes:
-# * Empirical variance of estimator converges to sandwich with expected values
-# * Linf and K seem to converge at about same speed (bias and as. norm.)
-# * n=500 is already good enough for getting variances in right ballpark.
-
 fa65 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function and gradient wrt (Linf,K)
   rss <- function(par,L1,L2,deltaT){
@@ -1638,14 +1868,6 @@ fa65 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 #///////////////////////////////////////////////////////////////////////////////
 #### gh59: Gulland and Holt (1959) ####
 #///////////////////////////////////////////////////////////////////////////////
-
-# Notes:
-# * Emp var of estimator converges to sandwich with expected values.
-# * Emp var of K converges much more quickly than Linf, maybe because
-#   of bias that vanishes only with large sample sizes (>5000).
-# * Consequence: unless n is really large, sandwich underestimates greatly emp
-#   variance of Linf (let alone MSE with non-zero bias)
-# * Related: estimated Linf is quite positively skewed unless n very large.
 
 gh59 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
   ### objective function and gradient wrt (Linf,K)
