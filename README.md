@@ -19,7 +19,7 @@ Files contained in this repository:
 ### Version History
 
 This is GrowthEstimation version 0.4.1. Changelog since last version:
-* 
+* added new function Bfr88, our (Bayesian) take on Francis (1988).
 
 
 Changelog v0.4:
