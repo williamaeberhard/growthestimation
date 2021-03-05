@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.4.1 ####
+#### GrowthEstimation v0.4.2 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -455,11 +455,12 @@ Bfa65 <- function(par,L1,L2,deltaT,
     
     # extract MCMC post draws for derived quantities specified in obj's REPORT
     mcmc.post <- as.matrix(mcmc.obj)
-    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
+    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=3) # Linf, K, sigma
     for (i in 1:nrow(mcmc.post)){
-      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('Linf','K')])
+      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+        c('Linf','K','sigma')]) # need all param for DIC
     }
-    # colMeans(mcmc.est) # post means for Linf and K
+    # colMeans(mcmc.est[,1:2]) # post means for Linf and K
     
     res <- list('par'=c(median(mcmc.est[,1]),median(mcmc.est[,2])),
                 # 'par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
@@ -468,8 +469,30 @@ Bfa65 <- function(par,L1,L2,deltaT,
     # ^ MCMC point estimates are posterior median as of v0.3.1
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
+    
+    # DIC, both p_D and p_V versions
+    loglik.fa65 <- function(par,L1,L2,deltaT){
+      Linf <- par[1]
+      K <- par[2]
+      sigma <- par[3]
+      meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+      return(sum(dnorm(x=L2, mean=meanL2, sd=sigma, log=T)))
+    }
+    
+    postdev <- -2*apply(X=mcmc.est, MARGIN=1, FUN=loglik.fa65,
+                        L1=L1, L2=L2, deltaT=deltaT)
+    # ^ post draws of deviance = -2*loglik
+    
+    dic1 <- 2*(mean(postdev)+loglik.fa65(par=colMeans(mcmc.est),
+                                         L1=L1,L2=L2,deltaT=deltaT))
+    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
+    dic2 <- mean((postdev-mean(postdev))^2) +
+      -2*loglik.fa65(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
+    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
+    res$DIC <- c(dic1,dic2)
+    names(res$DIC) <- c('pD','pV')
   } else {
-    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb)
+    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb,'DIC'=c(NA,NA))
     names(res$par.TMB) <- c('Linf','K')
   }
   
@@ -508,7 +531,9 @@ Bfa65 <- function(par,L1,L2,deltaT,
   
   if (!onlyTMB & all(priordist.code!=0)){
     res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
-                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
+                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)),
+                         'sigma'=quantile(mcmc.est[,3],probs=c(0.025,0.975))
+    )
     # ^ equal-tailed 95% credible intervals based on MCMC draws
   }
   
@@ -1048,11 +1073,136 @@ Bfr88 <- function(par,L1,L2,deltaT,
     
     # extract MCMC post draws for derived quantities specified in obj's REPORT
     mcmc.post <- as.matrix(mcmc.obj)
-    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
-    for (i in 1:nrow(mcmc.post)){
-      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('Linf','K')])
+    
+    if (varfunc=='constant'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=3) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+        return(sum(dnorm(x=L2, mean=meanL2, sd=sigma, log=T)))
+      }
+    } else if (varfunc=='prop.dL'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        meandL <- (Linf-L1)*(1-exp(-K*deltaT))
+        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*meandL, log=T)))
+      }
+    } else if (varfunc=='prop.dT'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        meandL <- (Linf-L1)*(1-exp(-K*deltaT))
+        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*deltaT, log=T)))
+      }
+    } else if (varfunc=='prop.L2'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+        return(sum(dnorm(x=L2, mean=meanL2, sd=sigma+sda*meanL2, log=T)))
+      }
+    } else if (varfunc=='exp.dL'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda','sdb')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        sdb <- par[5]
+        meandL <- (Linf-L1)*(1-exp(-K*deltaT))
+        sd_expdL <- sigma + sdb*(1-exp(-sda*meandL))
+        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sd_expdL, log=T)))
+      }
+    } else if (varfunc=='exp.L2'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda','sdb')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        sdb <- par[5]
+        meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+        sd_expL2 <- sigma + sdb*(1-exp(-sda*meanL2))
+        return(sum(dnorm(x=L2, mean=meanL2, sd=sd_expL2, log=T)))
+      }
+    } else if (varfunc=='pow.dL'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda','sdb')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        sdb <- par[5]
+        meandL <- (Linf-L1)*(1-exp(-K*deltaT))
+        sd_powdL <- sigma + sda*meandL^sdb
+        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sd_powdL, log=T)))
+      }
+    } else if (varfunc=='pow.L2'){
+      mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
+      for (i in 1:nrow(mcmc.post)){
+        mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[
+          c('Linf','K','sigma','sda','sdb')])
+      }
+      
+      loglik <- function(par,L1,L2,deltaT){
+        Linf <- par[1]
+        K <- par[2]
+        sigma <- par[3]
+        sda <- par[4]
+        sdb <- par[5]
+        meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+        sd_powL2 <- sigma + sda*meanL2^sdb
+        return(sum(dnorm(x=L2, mean=meanL2, sd=sd_powL2, log=T)))
+      }
     }
-    # colMeans(mcmc.est) # post means for Linf and K
+    # colMeans(mcmc.est[,1:2]) # post means for Linf and K
     
     res <- list('par'=c(median(mcmc.est[,1]),median(mcmc.est[,2])),
                 # 'par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
@@ -1061,8 +1211,21 @@ Bfr88 <- function(par,L1,L2,deltaT,
     # ^ MCMC point estimates are posterior median as of v0.3.1
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
+    
+    # DIC, both p_D and p_V versions
+    postdev <- -2*apply(X=mcmc.est, MARGIN=1, FUN=loglik,
+                        L1=L1, L2=L2, deltaT=deltaT)
+    
+    dic1 <- 2*(mean(postdev)+loglik(par=colMeans(mcmc.est),
+                                    L1=L1,L2=L2,deltaT=deltaT))
+    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
+    dic2 <- mean((postdev-mean(postdev))^2) +
+      -2*loglik(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
+    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
+    res$DIC <- c(dic1,dic2)
+    names(res$DIC) <- c('pD','pV')
   } else {
-    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb)
+    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb,'DIC'=c(NA,NA))
     names(res$par.TMB) <- c('Linf','K')
   }
   
@@ -1101,7 +1264,9 @@ Bfr88 <- function(par,L1,L2,deltaT,
   
   if (!onlyTMB & all(priordist.code!=0)){
     res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
-                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
+                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)),
+                         'sigma'=quantile(mcmc.est[,3],probs=c(0.025,0.975))
+                         )
     # ^ equal-tailed 95% credible intervals based on MCMC draws
   }
   
@@ -1401,7 +1566,7 @@ fr88 <- function(par,L1,L2,deltaT,
     opt$value <- opt$obj
   }
   
-
+  
   ### optional: try many different starting values, opt actually not convex
   if (try.good.ini | class(opt)=='try-error'){
     # then use my better ini, no subsets
@@ -1593,7 +1758,7 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
 #///////////////////////////////////////////////////////////////////////////////
 
 oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
-                 try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
+                    try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
   # par argument now necessary, used as first ini to try and only one if
   # try.many.ini=F
   

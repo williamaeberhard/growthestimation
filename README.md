@@ -18,9 +18,12 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.4.1. Changelog since last version:
-* added new function Bfr88, our (Bayesian) take on Francis (1988).
+This is GrowthEstimation version 0.4.2. Changelog since last version:
+* Bfa65 and Bfr88: added DIC as output (both p_D and p_V versions)
 
+
+Changelog v0.4.1:
+* added new function Bfr88, our (Bayesian) take on Francis (1988).
 
 Changelog v0.4:
 * Francis (1988) estimation method fr88:

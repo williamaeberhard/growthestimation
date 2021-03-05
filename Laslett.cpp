@@ -1,4 +1,4 @@
-// Laslett, Eveson and Polachek (2002) CJFAS | v0.4.1
+// Laslett, Eveson and Polachek (2002) CJFAS | v0.4.2
 // 2 randeff: Linf (Gaussian) and A (lognormal), indep
 // model L1 and L2 jointly, cond. indep given Linf and A, observed T1 and T2
 // option for uniform priors, user-supplied uniform bounds
