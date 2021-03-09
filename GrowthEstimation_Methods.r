@@ -299,7 +299,7 @@ Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
 #///////////////////////////////////////////////////////////////////////////////
 
 Bfa65 <- function(par,L1,L2,deltaT,
-                  priordist.Linf='uniform',
+                  priordist.Linf='lognormal',
                   priordist.K='uniform',
                   priordist.sigma='uniform',
                   hyperpar=NULL,
@@ -469,30 +469,8 @@ Bfa65 <- function(par,L1,L2,deltaT,
     # ^ MCMC point estimates are posterior median as of v0.3.1
     names(res$par) <- c('Linf','K')
     names(res$par.TMB) <- c('Linf','K')
-    
-    # DIC, both p_D and p_V versions
-    loglik.fa65 <- function(par,L1,L2,deltaT){
-      Linf <- par[1]
-      K <- par[2]
-      sigma <- par[3]
-      meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
-      return(sum(dnorm(x=L2, mean=meanL2, sd=sigma, log=T)))
-    }
-    
-    postdev <- -2*apply(X=mcmc.est, MARGIN=1, FUN=loglik.fa65,
-                        L1=L1, L2=L2, deltaT=deltaT)
-    # ^ post draws of deviance = -2*loglik
-    
-    dic1 <- 2*(mean(postdev)+loglik.fa65(par=colMeans(mcmc.est),
-                                         L1=L1,L2=L2,deltaT=deltaT))
-    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
-    dic2 <- mean((postdev-mean(postdev))^2) +
-      -2*loglik.fa65(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
-    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
-    res$DIC <- c(dic1,dic2)
-    names(res$DIC) <- c('pD','pV')
   } else {
-    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb,'DIC'=c(NA,NA))
+    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb)
     names(res$par.TMB) <- c('Linf','K')
   }
   
@@ -522,10 +500,9 @@ Bfa65 <- function(par,L1,L2,deltaT,
     if (onlyTMB | any(priordist.code==0)){
       warning('No posterior draws if onlyTMB=TRUE or not all priordist set.')
     } else {
-      # res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
-      # res$post.draws <- as.list(mcmc.post)
       res$post.draws <- list('Linf'=mcmc.est[,1],
-                             'K'=mcmc.est[,2])
+                             'K'=mcmc.est[,2],
+                             'sigma'=mcmc.est[,3])
     }
   }
   
@@ -535,8 +512,50 @@ Bfa65 <- function(par,L1,L2,deltaT,
                          'sigma'=quantile(mcmc.est[,3],probs=c(0.025,0.975))
     )
     # ^ equal-tailed 95% credible intervals based on MCMC draws
+    
+    # DIC, both p_D and p_V versions
+    loglikvec <- function(par,L1,L2,deltaT,log=T){
+      Linf <- par[1]
+      K <- par[2]
+      sigma <- par[3]
+      meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
+      return(dnorm(x=L2, mean=meanL2, sd=sigma, log=log))
+    }
+    loglik <- function(par,L1,L2,deltaT){
+      return(sum(loglikvec(par,L1,L2,deltaT)))
+    } # common wrapper for sum of log-likelihoods over obs
+    
+    postdev <- -2*apply(X=mcmc.est,MARGIN=1,FUN=loglik,L1=L1,L2=L2,deltaT=deltaT)
+    # ^ post draws of deviance = -2*loglik
+    ll.mean <- loglik(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
+    
+    dic1 <- 2*(mean(postdev)+ll.mean)
+    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
+    dic2 <- mean((postdev-mean(postdev))^2)-2*ll.mean
+    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
+    res$DIC <- c(dic1,dic2)
+    names(res$DIC) <- c('pD','pV')
+    
+    # WAIC with variance-based "bias correction" term
+    llmat <- apply(X=mcmc.est, MARGIN=1, FUN=loglikvec,
+                   L1=L1, L2=L2, deltaT=deltaT)
+    # ^ n rows, iter cols
+    pWAIC2 <- mean(apply(X=llmat,MARGIN=1,FUN=var))
+    # ^ sum over obs of emp var over MCMC draws, eq. (7.12) in Gelman et al. (2014)
+    
+    likmat <- apply(X=mcmc.est, MARGIN=1, FUN=loglikvec,
+                    L1=L1, L2=L2, deltaT=deltaT, log=F) # post density
+    lppd <- sum(log(rowMeans(likmat)))
+    # ^ log pointwise pred density, eq. (7.5) in Gelman et al. (2014)
+    
+    res$WAIC <- -2*(lppd-pWAIC2)
+  } else {
+    res$cred.int <- NA
+    res$DIC <- c(NA,NA)
+    res$WAIC <- NA
   }
   
+  res$AIC <- 2*opt$obj+2*length(opt$par) # output AIC anyway
   res$value.TMB <- opt$obj
   res$conv.TMB <- opt$mess
   
@@ -873,11 +892,11 @@ ja91 <- function(par,L1,L2,deltaT,meth='nlminb',compute.se=T){
 #///////////////////////////////////////////////////////////////////////////////
 
 Bfr88 <- function(par,L1,L2,deltaT,
-                  priordist.Linf='uniform',
+                  priordist.Linf='lognormal',
                   priordist.K='uniform',
                   priordist.sigma='uniform',
                   hyperpar=NULL,
-                  varfunc='constant',enablepriorsd=0L,
+                  varfunc='constant',enablepriorsd=1L,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
                   mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
@@ -1081,12 +1100,12 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
         meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
-        return(sum(dnorm(x=L2, mean=meanL2, sd=sigma, log=T)))
+        return(dnorm(x=L2, mean=meanL2, sd=sigma, log=log))
       }
     } else if (varfunc=='prop.dL'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
@@ -1095,13 +1114,13 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
         sda <- par[4]
         meandL <- (Linf-L1)*(1-exp(-K*deltaT))
-        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*meandL, log=T)))
+        return(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*meandL, log=log))
       }
     } else if (varfunc=='prop.dT'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
@@ -1110,13 +1129,13 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
         sda <- par[4]
         meandL <- (Linf-L1)*(1-exp(-K*deltaT))
-        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*deltaT, log=T)))
+        return(dnorm(x=L2-L1, mean=meandL, sd=sigma+sda*deltaT, log=log))
       }
     } else if (varfunc=='prop.L2'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=4) # all param
@@ -1125,13 +1144,13 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
         sda <- par[4]
         meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
-        return(sum(dnorm(x=L2, mean=meanL2, sd=sigma+sda*meanL2, log=T)))
+        return(dnorm(x=L2, mean=meanL2, sd=sigma+sda*meanL2, log=log))
       }
     } else if (varfunc=='exp.dL'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
@@ -1140,7 +1159,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda','sdb')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
@@ -1148,7 +1167,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
         sdb <- par[5]
         meandL <- (Linf-L1)*(1-exp(-K*deltaT))
         sd_expdL <- sigma + sdb*(1-exp(-sda*meandL))
-        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sd_expdL, log=T)))
+        return(dnorm(x=L2-L1, mean=meandL, sd=sd_expdL, log=log))
       }
     } else if (varfunc=='exp.L2'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
@@ -1157,7 +1176,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda','sdb')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
@@ -1165,7 +1184,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
         sdb <- par[5]
         meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
         sd_expL2 <- sigma + sdb*(1-exp(-sda*meanL2))
-        return(sum(dnorm(x=L2, mean=meanL2, sd=sd_expL2, log=T)))
+        return(dnorm(x=L2, mean=meanL2, sd=sd_expL2, log=log))
       }
     } else if (varfunc=='pow.dL'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
@@ -1174,7 +1193,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda','sdb')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
@@ -1182,7 +1201,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
         sdb <- par[5]
         meandL <- (Linf-L1)*(1-exp(-K*deltaT))
         sd_powdL <- sigma + sda*meandL^sdb
-        return(sum(dnorm(x=L2-L1, mean=meandL, sd=sd_powdL, log=T)))
+        return(dnorm(x=L2-L1, mean=meandL, sd=sd_powdL, log=log))
       }
     } else if (varfunc=='pow.L2'){
       mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=5) # all param
@@ -1191,7 +1210,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
           c('Linf','K','sigma','sda','sdb')])
       }
       
-      loglik <- function(par,L1,L2,deltaT){
+      loglikvec <- function(par,L1,L2,deltaT,log=T){
         Linf <- par[1]
         K <- par[2]
         sigma <- par[3]
@@ -1199,9 +1218,12 @@ Bfr88 <- function(par,L1,L2,deltaT,
         sdb <- par[5]
         meanL2 <- Linf-(Linf-L1)*exp(-K*deltaT)
         sd_powL2 <- sigma + sda*meanL2^sdb
-        return(sum(dnorm(x=L2, mean=meanL2, sd=sd_powL2, log=T)))
+        return(dnorm(x=L2, mean=meanL2, sd=sd_powL2, log=log))
       }
     }
+    loglik <- function(par,L1,L2,deltaT){
+      return(sum(loglikvec(par,L1,L2,deltaT)))
+    } # common wrapper for sum of log-likelihoods over obs
     # colMeans(mcmc.est[,1:2]) # post means for Linf and K
     
     res <- list('par'=c(median(mcmc.est[,1]),median(mcmc.est[,2])),
@@ -1210,24 +1232,10 @@ Bfr88 <- function(par,L1,L2,deltaT,
                 'par.TMB'=theta.tmb)
     # ^ MCMC point estimates are posterior median as of v0.3.1
     names(res$par) <- c('Linf','K')
-    names(res$par.TMB) <- c('Linf','K')
-    
-    # DIC, both p_D and p_V versions
-    postdev <- -2*apply(X=mcmc.est, MARGIN=1, FUN=loglik,
-                        L1=L1, L2=L2, deltaT=deltaT)
-    
-    dic1 <- 2*(mean(postdev)+loglik(par=colMeans(mcmc.est),
-                                    L1=L1,L2=L2,deltaT=deltaT))
-    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
-    dic2 <- mean((postdev-mean(postdev))^2) +
-      -2*loglik(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
-    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
-    res$DIC <- c(dic1,dic2)
-    names(res$DIC) <- c('pD','pV')
-  } else {
-    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb,'DIC'=c(NA,NA))
-    names(res$par.TMB) <- c('Linf','K')
+  } else { # then no MCMC and only report TMB (frequentist) estimate
+    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb)
   }
+  names(res$par.TMB) <- c('Linf','K')
   
   ### optional: compute standard errors
   if (compute.se){
@@ -1250,15 +1258,14 @@ Bfr88 <- function(par,L1,L2,deltaT,
     }
   }
   
-  ### output
+  ### output, AIC/DIC/WAIC
   if (output.post.draws){
     if (onlyTMB | any(priordist.code==0)){
       warning('No posterior draws if onlyTMB=TRUE or not all priordist set.')
     } else {
-      # res$post.draws <- list('Linf'=mcmc.Linf,'K'=mcmc.K)
-      # res$post.draws <- as.list(mcmc.post)
       res$post.draws <- list('Linf'=mcmc.est[,1],
-                             'K'=mcmc.est[,2])
+                             'K'=mcmc.est[,2],
+                             'sigma'=mcmc.est[,3])
     }
   }
   
@@ -1266,16 +1273,104 @@ Bfr88 <- function(par,L1,L2,deltaT,
     res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
                          'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)),
                          'sigma'=quantile(mcmc.est[,3],probs=c(0.025,0.975))
-                         )
+    )
     # ^ equal-tailed 95% credible intervals based on MCMC draws
+    
+    # DIC, both p_D and p_V versions
+    postdev <- -2*apply(X=mcmc.est, MARGIN=1, FUN=loglik,
+                        L1=L1, L2=L2, deltaT=deltaT)
+    ll.mean <- loglik(par=colMeans(mcmc.est),L1=L1,L2=L2,deltaT=deltaT)
+    
+    dic1 <- 2*(mean(postdev)+ll.mean)
+    # ^ original DIC def with p_D, Spiegelhalter et al. (2002, JRSSB)
+    dic2 <- mean((postdev-mean(postdev))^2)-2*ll.mean
+    # ^ alt DIC def with p_V = 0.5*post var of deviance, Gelman et al. (2014)
+    res$DIC <- c(dic1,dic2)
+    names(res$DIC) <- c('pD','pV')
+    
+    # WAIC with variance-based "bias correction" term
+    llmat <- apply(X=mcmc.est, MARGIN=1, FUN=loglikvec,
+                   L1=L1, L2=L2, deltaT=deltaT)
+    # ^ n rows, iter cols
+    pWAIC2 <- mean(apply(X=llmat,MARGIN=1,FUN=var))
+    # ^ sum over obs of emp var over MCMC draws, eq. (7.12) in Gelman et al. (2014)
+    
+    likmat <- apply(X=mcmc.est, MARGIN=1, FUN=loglikvec,
+                    L1=L1, L2=L2, deltaT=deltaT, log=F) # post density
+    lppd <- sum(log(rowMeans(likmat)))
+    # ^ log pointwise pred density, eq. (7.5) in Gelman et al. (2014)
+    
+    res$WAIC <- -2*(lppd-pWAIC2)
+  } else {
+    res$cred.int <- NA
+    res$DIC <- c(NA,NA)
+    res$WAIC <- NA
   }
   
+  res$AIC <- 2*opt$obj+2*length(opt$par) # output AIC anyway
   res$value.TMB <- opt$obj
   res$conv.TMB <- opt$mess
-  res$AIC <- 2*opt$obj+2*length(opt$par)
-  
+
   return(res)
 }
+
+
+
+### wrapper for Bfr88 with model selection by min WAIC/AIC
+Bfr88.minIC <- function(par,L1,L2,deltaT,
+                         priordist.Linf,
+                         priordist.K,
+                         priordist.sigma,
+                         hyperpar,enablepriorsd,
+                         meth,compute.se,
+                         onlyTMB,output.post.draws,
+                         mcmc.control){
+  # could be improved by setting compute.se=F for all candidate models and
+  # separate se comp without estim
+  
+  # except "constant" (= Fabens), all other variance functions are non-nested,
+  # so simply fit all and keep on with smallest DIC$pV
+  varfunc.charvec <- c("constant","prop.dL","prop.dT","prop.L2",
+                       "exp.dL","exp.L2","pow.dL","pow.L2") # test all by def?
+  fitlist <- vector('list',length(varfunc.charvec))
+  
+  # wallclock <- proc.time()[3]
+  for (j in 1:length(varfunc.charvec)){
+    system.time(fitlist[[j]] <- Bfr88(par=par,L1=L1,L2=L2,deltaT=deltaT,
+                                      priordist.Linf=priordist.Linf,
+                                      priordist.K=priordist.K,
+                                      priordist.sigma=priordist.sigma,
+                                      hyperpar=hyperpar,
+                                      varfunc=varfunc.charvec[j], 
+                                      enablepriorsd=enablepriorsd,meth=meth,
+                                      compute.se=compute.se,onlyTMB=onlyTMB,
+                                      output.post.draws=output.post.draws,
+                                      mcmc.control=mcmc.control))
+  }
+  # print(proc.time()[3]-wallclock)
+  
+  # rbind(sapply(fitlist,'[[','DIC'),
+  #       sapply(fitlist,'[[','WAIC'),
+  #       sapply(fitlist,'[[','AIC')) # meaningful only if frequentist est
+  
+  if (!all(c(priordist.Linf,priordist.K,priordist.sigma)%in%
+      c('uniform','normal','Gaussian','lognormal')) |
+      !as.logical(enablepriorsd) | onlyTMB){
+    # then consider est as frequentist and use AIC for model selection
+    ind.best <- which.min(sapply(fitlist,'[[','AIC')) # AIC
+    message('Best (smallest AIC) Bfr88 model: varfunc = "',
+            varfunc.charvec[ind.best],'"')
+  } else { # then legit Bayesian est, use DIC computed from MCMC draws
+    # ind.best <- which.min(sapply(fitlist,function(x){x$DIC[2]})) # DIC with pV
+    ind.best <- which.min(sapply(fitlist,'[[','WAIC')) # WAIC
+    message('Best (smallest WAIC) Bfr88 model: varfunc = "',
+            varfunc.charvec[ind.best],'"')
+  }
+  
+  return(c(fitlist[[ind.best]],'best.model'=varfunc.charvec[ind.best]))
+}
+
+
 
 
 

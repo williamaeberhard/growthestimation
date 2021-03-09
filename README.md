@@ -19,7 +19,8 @@ Files contained in this repository:
 ### Version History
 
 This is GrowthEstimation version 0.4.2. Changelog since last version:
-* Bfa65 and Bfr88: added DIC as output (both p_D and p_V versions)
+* Bfa65 and Bfr88: added DIC (both p_D and p_V versions) and WAIC as output.
+* new wrapper function Bfr88.minIC: fits multiple Bfr88 models with same priors but different variance functions, and returns the best model in terms of min WAIC (if enablepriorsd=TRUE, all priors for Linf, K and sigma are specified, and onlyTMB=FALSE) or min AIC (if not all three conditions are met) along with character string specifying which sub-model it is (output $best.model).
 
 
 Changelog v0.4.1:
