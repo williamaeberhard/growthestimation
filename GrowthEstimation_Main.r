@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data v0.4.2 ####
+#### GrowthEstimation: compare methods on simulated data v0.4.3 ####
 #///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
@@ -194,10 +194,17 @@ par(mfrow=c(1,1))
 # rm(list=ls())
 
 ### // setup ----
-require(TMB) # needed for FabensTwoPop
+require(TMB) # needed for both LRT and BF
 
 compile("FabensTwoPop.cpp") # only need to run once
-dyn.load(dynlib("FabensTwoPop")) # to run for every new R session
+# ^ necessary for likelihood ratio test (LRT) based on Fabens (1965) model
+compile("FabensTwoPopBayesian_M0.cpp") # only need to run once
+compile("FabensTwoPopBayesian_M1.cpp") # only need to run once
+
+dyn.load(dynlib("FabensTwoPop"))            # to run for every new R session
+dyn.load(dynlib("FabensTwoPopBayesian_M0")) # to run for every new R session
+dyn.load(dynlib("FabensTwoPopBayesian_M1")) # to run for every new R session
+# ^ necessary for Bayes factor (BF) based on Bayesian Fabens (1965) formulation
 
 source('GrowthEstimation_Tests.r')
 
@@ -207,15 +214,16 @@ n <- 100 # total sample size, nb of capture-recapture pairs
 n1 <- 50 # sample size pop1
 n2 <- n-n1 # sample size pop2
 
-trueLinf1 <- 125 # close to starry smooth-hound Mustelus asterias
-trueK1 <- 0.145 # close to starry smooth-hound Mustelus asterias
+trueLinf1 <- 130 # close to starry smooth-hound Mustelus asterias
+trueK1 <- 0.14 # close to starry smooth-hound Mustelus asterias
 trueLinf2 <- 120 # pop2, slightly smaller than that of pop1
-trueK2 <- 0.145 # pop2, same as pop1
+trueK2 <- 0.15 # pop2, same as pop1
+# ^ pop1 grows slightly larger but slower
 
-sigmaeps1 <- 2 # errror sd, pop1
-sigmaeps2 <- 2 # errror sd, pop2
+sigmaeps1 <- 1 # errror sd, pop1
+sigmaeps2 <- 1 # errror sd, pop2
 
-par.ini <- c(100,0.2) # initial values for Linf and K, somewhat in ballpark
+par.ini <- c(100,0.5) # initial values for Linf and K, somewhat in ballpark
 
 set.seed(1234) # for replicability
 
@@ -235,13 +243,38 @@ Lrecap2 <- trueLinf2 - (trueLinf2-Lcap2)*exp(-trueK2*deltaT2) + eps2 # pop 2
 # ^ both follow the vB curve with some iid Gaussian error on lengths at recap
 
 
-### // compute likelihood ratio test (LRT) to compare the two pop ----
+### // compute LRT to compare the two pop in terms of (Linf,K) ----
 LRT_2pop_fa65(par=par.ini,alpha=0.05,
-  L1.pop1=Lcap1,L2.pop1=Lrecap1,T1.pop1=rep(0,n1),T2.pop1=deltaT1,
-  L1.pop2=Lcap2,L2.pop2=Lrecap2,T1.pop2=rep(0,n2),T2.pop2=deltaT2)
+  L1.pop1=Lcap1,L2.pop1=Lrecap1,deltaT.pop1=deltaT1,
+  L1.pop2=Lcap2,L2.pop2=Lrecap2,deltaT.pop2=deltaT2)
 # ^ test stat > chi^2 critical value or equivalently p-value < alpha
 #   => reject H0 at significance level alpha=0.05, the pair (Linf,K) differs
 #      between the two pop
+
+
+### // set up priors and compute BF ----
+priordist <- c(3L,1L,1L) # 0=no prior, 1=unif, 2=Gaussian, 3=lognormal
+# ^ lognormal on Linf, uniform on K, uniform on sigmaeps
+
+hp.Linf <- c(2*log(par.ini[1])-log(1+par.ini[1]^2)/2, 0.3)
+# ^ lognormal prior meanlog/sdlog
+hp.K <- c(1e-2, 1) # uniform prior lower/upper bound
+hp.sigmaeps <- c(1e-5, 50) # uniform prior lower/upper bound
+# ^ note that (for simplicity) we set the same priors for (Linf,K) under both
+#   M0 and M1 competing models, thus clearly pushing towards M1 a priori
+
+BF_2pop_Bfa65(par=par.ini,
+              L1.pop1=Lcap1,L2.pop1=Lrecap1,deltaT.pop1=deltaT1,
+              L1.pop2=Lcap2,L2.pop2=Lrecap2,deltaT.pop2=deltaT2,
+              priordist.M0=priordist,
+              priordist.M1.pop1=priordist,
+              priordist.M1.pop2=priordist,
+              hyperpar.M0=list(hp.Linf,hp.K,hp.sigmaeps),
+              hyperpar.M1.pop1=list(hp.Linf,hp.K,hp.sigmaeps),
+              hyperpar.M1.pop2=list(hp.Linf,hp.K,hp.sigmaeps))
+# ^ BF very large, notably > 100 so falls in the "Decisive" evidence in favor
+#   of M1 according to table in Kass and Raftery (1995, p. 777, JASA)
+#   => M1 is to be preferred (in spite of priors favoring M0)
 
 
 

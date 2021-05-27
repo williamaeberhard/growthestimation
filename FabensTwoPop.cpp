@@ -1,4 +1,4 @@
-// Fabens (1965) estimation for two populations | v0.4.2
+// Fabens (1965) estimation for two populations | v0.4.3
 // Gaussian likelihood assumed (original Fabens only based on moments)
 // no priors, frequentist (ML) onyl for now
 // model length at recap L2, given observed T1, T2 and L1
@@ -25,13 +25,11 @@ Type objective_function<Type>::operator() () {
 	// Data
 	DATA_VECTOR(L1_1); // lengths at cap, pop 1, dim n1
 	DATA_VECTOR(L2_1); // lengths at recap, pop 1, dim n1
-	DATA_VECTOR(T1_1); // time at cap, pop 1, dim n1
-	DATA_VECTOR(T2_1); // time at recap, pop 1, dim n1
+	DATA_VECTOR(deltaT_1); // time at liberty, pop 1, dim n1
 
 	DATA_VECTOR(L1_2); // lengths at cap, pop 2, dim n2
 	DATA_VECTOR(L2_2); // lengths at recap, pop 2, dim n2
-	DATA_VECTOR(T1_2); // time at cap, pop 2, dim n2
-	DATA_VECTOR(T2_2); // time at recap, pop 2, dim n2
+	DATA_VECTOR(deltaT_2); // time at liberty, pop 2, dim n2
 
 	// Parameters
 	PARAMETER(logLinf); // vB Linf pop 1
@@ -120,14 +118,14 @@ Type objective_function<Type>::operator() () {
 	//--------------------------------------------------------------------------
 
 	for (int i = 0; i < n1; i++){ // pop 1
-		Type deltaT = T2_1(i)-T1_1(i); // time increment between cap and recap
-		Type meanL2 = Linf - (Linf-L1_1(i))*exp(-K*deltaT); // vB pop 1
+		// Type deltaT = T2_1(i)-T1_1(i); // time increment between cap and recap
+		Type meanL2 = Linf - (Linf-L1_1(i))*exp(-K*deltaT_1(i)); // vB pop 1
 		nll -= dnorm(L2_1(i), meanL2, sigma1, true); // Gaussian lkhd
 	}
 
 	for (int i = 0; i < n2; i++){ // pop 2
-		Type deltaT = T2_2(i)-T1_2(i); // time increment between cap and recap
-		Type meanL2 = Linf2 - (Linf2-L1_2(i))*exp(-K2*deltaT); // vB pop 2
+		// Type deltaT = T2_2(i)-T1_2(i); // time increment between cap and recap
+		Type meanL2 = Linf2 - (Linf2-L1_2(i))*exp(-K2*deltaT_2(i)); // vB pop 2
 		nll -= dnorm(L2_2(i), meanL2, sigma2, true); // Gaussian lkhd
 	}
 
@@ -137,17 +135,21 @@ Type objective_function<Type>::operator() () {
 	// Outputs
 	//--------------------------------------------------------------------------
 
-	// REPORT(Linf);
-	// REPORT(K);
-	// REPORT(Linf2);
-	// REPORT(K2);
+	REPORT(Linf);
+	REPORT(K);
+	REPORT(sigma1);
+	REPORT(Linf2);
+	REPORT(K2);
+	REPORT(sigma2);
+	REPORT(deltaLinf);
+	REPORT(deltaK);
 
-	ADREPORT(Linf);
-	ADREPORT(K);
-	ADREPORT(sigma1);
-	ADREPORT(deltaLinf);
-	ADREPORT(deltaK);
-	ADREPORT(sigma2);
+	// ADREPORT(Linf);
+	// ADREPORT(K);
+	// ADREPORT(sigma1);
+	// ADREPORT(deltaLinf);
+	// ADREPORT(deltaK);
+	// ADREPORT(sigma2);
 
 	return nll;
 }

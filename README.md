@@ -11,17 +11,24 @@ Files contained in this repository:
 * GrowthEstimation_Methods.r: an R script to source to create functions corresponding to all the estimation methods under study;
 * GrowthEstimation_CapRecapSim.r: an R script to source to create the CapRecapSim function that simulated mark-recapture data according to various scenarios;
 * FabensBayesian.cpp, Laslett.cpp, Zhang.cpp: C++ scripts to compile with the R package TMB;
-* GrowthEstimation_Tests.r: an R script defining a likelihood ratio test (LRT) for comparing two independent populations in terms of their (Linf,K) parameters according to the (frequentist) Fabens (1965) formulation;
+* GrowthEstimation_Tests.r: an R script defining a likelihood ratio test (LRT) and a (Laplace-approximated) Bayes factor for comparing two independent populations in terms of their (Linf,K) parameters according to the (frequentist) Fabens (1965) method and its Bayesian formulation;
 * FabensTwoPop.cpp: a C++ script to compile for the LRT comparing two populations;
+* FabensTwoPopBayesian_M0.cpp and FabensTwoPopBayesian_M1.cpp: C++ scripts to compile for the Bayes factor comparing two populations;
 * this README file.
 
 
 ### Version History
 
-This is GrowthEstimation version 0.4.2. Changelog since last version:
+This is GrowthEstimation version 0.4.3. Changelog since last version:
+* LRT_2pop_fa65:
+  - now user supplies deltaT (=Trecap-Tcap) rather than the two separate (absolute) times as separate vector. FabensTwoPop.cpp modified too.
+  - default values in case par not supplied changed from (0,0) to (1,0.5) and issuing a warning now.
+* In GrowthEstimation_Tests.r, created BF_2pop_Bfa65: Bayesian analogue of LRT_2pop_fa65, it computes the (Laplace-approximated) Bayes factor between two competing models M1 and M0, where M0 sets the same Linf and K values between the two populations we compare (allowing different error sd parameters though) and M1 allows Linf and K to be different (with possibly different priors too).
+* Adapted lines at the bottom of GrowthEstimation_Main.r to account for changes in LRT_2pop_fa65 and new function BF_2pop_Bfa65.
+
+Changelog v0.4.2:
 * Bfa65 and Bfr88: added DIC (both p_D and p_V versions) and WAIC as output.
 * new wrapper function Bfr88.minIC: fits multiple Bfr88 models with same priors but different variance functions, and returns the best model in terms of min WAIC (if enablepriorsd=TRUE, all priors for Linf, K and sigma are specified, and onlyTMB=FALSE) or min AIC (if not all three conditions are met) along with character string specifying which sub-model it is (output $best.model).
-
 
 Changelog v0.4.1:
 * added new function Bfr88, our (Bayesian) take on Francis (1988).
@@ -58,7 +65,7 @@ Changelog v0.3:
 * Francis (1988) estimation method fr88: added try.many.ini boolean argument, if TRUE then try many starting values (based on data subsets as in fishmethods::grotag) in addition to the supplied one (optim highly sensitive to ini).
 
 Changelog v0.2.2:
-* Created GrowthEstimation_Tests.r where a LRT is defined to compare two populations in terms of (Linf,K) jointly, according to Fabens (1965) formulation. Added code at the end of GrowthEstimation_Main.r shows the usage on some simulated data.
+* Created GrowthEstimation_Tests.r where a likelihood ratio test (LRT) is implemented in the enw function LRT_2pop_fa65 to compare two populations in terms of (Linf,K) jointly, according to Fabens (1965) formulation. Added code at the end of GrowthEstimation_Main.r shows the usage on some simulated data.
 * In Bfa65: now allow for different families for priors on Linf, K, and sigma.
 * In Bfa65: for priordist="lognormal", user now provides mean and sd on original (exponential) scale, easier for interpretation.
 
