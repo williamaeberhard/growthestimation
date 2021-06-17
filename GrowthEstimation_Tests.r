@@ -125,15 +125,15 @@ BF_2pop_Bfa65 <- function(par=NULL,
   
   
   ### output
-  par.pop1 <- unlist(obj.M0$rep()[c('Linf','K','sigma1','sigma2')]) # est only
-  par.pop2 <- unlist(obj.M1$rep()[c('Linf1','K1','sigma1',
+  par.M0 <- unlist(obj.M0$rep()[c('Linf','K','sigma1','sigma2')]) # est only
+  par.M1 <- unlist(obj.M1$rep()[c('Linf1','K1','sigma1',
                                     'Linf2','K2','sigma2')]) # est only
   
   res <- list('BF'=BF,
               'marg.logpdf.M0'=as.numeric(-obj.M0.rand$fn(obj.M0.rand$par)),
               'marg.logpdf.M1'=as.numeric(-obj.M1.rand$fn(obj.M1.rand$par)),
-              'estTMB.pop1'=par.pop1,
-              'estTMB.pop2'=par.pop2)
+              'estTMB.M0'=par.M0,
+              'estTMB.M1'=par.M1)
   # ^ simple output for now, no se
   
   return(res)
