@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.4.3 ####
+#### GrowthEstimation v0.4.4 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -8,7 +8,8 @@
 
 
 GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
-                         category="BodyShape", LowP=0.8, UpP=1.2, LQ=0, UQ=1){
+                         category="BodyShape", LowP=0.8, UpP=1.2,
+                         lnorm.coef=c(1.2,3), LQ=0, UQ=1){
   # Documentation v0.2.1
   #' @title Calculates priors for the von Bertalanffy growth parameters
   # Linf and k using the growth performance index and maximum size Lmax
@@ -22,6 +23,10 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   #' uniform prior lower bound for the asymptotic size Linf
   #' @param UpP positive scalar, proportion of maximum length that defines the
   #' uniform prior upper bound for the asymptotic size Linf
+  #' @param lnorm.coef vector of 2 positive scalars defining narrow and wide
+  #' lognormal priors for Linf; first element * median is set as 0.99 quantile
+  #' to compute the narrow lognormal sdlog hyperparameter, while the second
+  #' element * median set as 0.99 quantile defines the wide lognormal.
   #' @param LQ scalar within (0,1), probability for lower quantile of growth
   #' performance index phi; if 0 then the minimum phi is used
   #' @param UQ scalar within (0,1), probability for upper quantile of growth
@@ -140,6 +145,27 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
   # ^ find sd such that uniform upper bound matches mean+3*sd. So prob under
   #   Gaussian within uniform bounds is pnorm(3)-pnorm(-3) = 99.7% roughly
   
+  
+  ### lognormal mean and sd (original scale) for Linf
+  # only requires Lmax and coef 1.2 (narrow) and 3 (wide) for finding sdlog
+  diffq <- function(sdlog,q,Lmax,prob=0.99){
+    meanlog <- log(Lmax/0.99) # median = Lmax/0.99
+    return(qlnorm(p=prob,meanlog=meanlog,sdlog=sdlog)-q)
+  }
+  meanlog1 <- log(Lmax/0.99)
+  sdlog1 <- uniroot(f=diffq, interval=c(1e-5,3),
+                    q=Lmax/0.99*lnorm.coef[1], Lmax=Lmax)$root
+  meanlog2 <- log(Lmax/0.99) # same median as narrow
+  sdlog2 <- uniroot(f=diffq, interval=c(1e-5,3),
+                    q=Lmax/0.99*lnorm.coef[2], Lmax=Lmax)$root
+  
+  logn.mean1 <- exp(meanlog1+sdlog1^2/2) # expectation on original scale
+  logn.sd1 <- sqrt(exp(sdlog1^2-1)*exp(2*meanlog1+sdlog1^2)) # sd original scale
+  
+  logn.mean2 <- exp(meanlog2+sdlog2^2/2) # expectation on original scale
+  logn.sd2 <- sqrt(exp(sdlog2^2-1)*exp(2*meanlog2+sdlog2^2)) # sd original scale
+  
+  
   ### Growth performance index phi according to Pauly (slope of -2)
   POP$phi <- log10(POP$K)+2*log10(POP$TLinfinity)
   
@@ -165,6 +191,10 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
                    'UpLinf'=UpLinf,   # for uniform prior on Linf
                    'meanLinf'=meanLinf, # for Gaussian prior on Linf
                    'sdLinf'=sdLinf,     # for Gaussian prior on Linf
+                   'lnorm.meanLinf.narrow'=logn.mean1, # narrow lognormal Linf
+                   'lnorm.sdLinf.narrow'=logn.sd1,     # narrow lognormal Linf
+                   'lnorm.meanLinf.wide'=logn.mean2, # wide lognormal Linf
+                   'lnorm.sdLinf.wide'=logn.sd2,     # wide lognormal Linf
                    'K'=K,       # uniform prior on K
                    'LowK'=LowK, # uniform prior on K
                    'UpK'=UpK)   # uniform prior on K
@@ -174,122 +204,6 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
 
 
 
-#///////////////////////////////////////////////////////////////////////////////
-#### Bla02: Bayesian Laslett, Eveson and Polacheck (2002) ####
-#///////////////////////////////////////////////////////////////////////////////
-
-Bla02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
-                  output.post.draws=F,lb.sd=NULL,
-                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
-  # uniform priors with user-supplied hyperparam
-  # hyperpar=list(lbubmuinf,lbubK) for consisetncy across methods, while bounds
-  # for lbubsigmainf, lbubmuA, lbubsigmaA and lbubsigmaeps are hard-coded below.
-  # lb.sd = lower bound for sigmainf and sigmaeps, in TMB optimization only.
-  
-  ### setup
-  if (is.null(hyperpar)){
-    stop('hyperpar must be supplied as list(c(lb,ub),c(lb,ub)) respectively for
-         the mean of Linf and for K.')
-  }
-  if (!compute.se){warning('se will be computed anyway.')}
-  
-  n <- length(L1)
-  parlist <- list('logmuinf'=log(par[1]),'logsigmainf'=0,
-                  'logK'=log(par[2]),
-                  'logmuA'=1,'logsigmaA'=0,
-                  'logsigmaeps'=0,
-                  'logLinf'=rep(log(par[1]),n),
-                  'logA'=rep(1,n))
-  length.theta <- 6
-  datalist <- list('L1'=L1,'L2'=L2,
-                   # 'T1'=T1,'T2'=T2,
-                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
-                   'lbubmuinf'=hyperpar[[1]], # user-supplied
-                   'lbubK'=hyperpar[[2]], # user-supplied
-                   'lbubsigmainf'=c(1e-10,1e4),
-                   'lbubmuA'=c(1e-10,1000),
-                   'lbubsigmaA'=c(1e-10,1e4),
-                   'lbubsigmaeps'=c(1e-10,1e4),
-                   'enablepriors'=1)
-  obj <- MakeADFun(data=datalist,parameters=parlist,
-                   random=c('logLinf','logA'),
-                   DLL="Laslett",silent=T)
-  
-  ### TMB optimization and sdreport
-  if (meth=='nlminb'){
-    if (is.null(lb.sd)){
-      lb.par <- rep(-Inf,length.theta) # no bounds
-    } else {
-      lb.par <- c(-Inf,log(lb.sd),-Inf,-Inf,-Inf,log(lb.sd))
-      # ^ helps if data too close to pure vB, otherwise Hessian not pos def
-    }
-    
-    opt <- nlminb(start=obj$par,obj=obj$fn,gr=obj$gr,
-                  control=list(eval.max=5000,iter.max=5000),lower=lb.par)
-    rep <- sdreport(obj)
-    summary.rep <- summary(rep)
-    theta.tmb <- summary.rep[c('muinf','K'),1]
-    se.theta.tmb <- summary.rep[c('muinf','K'),2]
-    # val.tmb <- obj$fn()
-  } else {stop('Only meth="nlminb" is allowed for now.')}
-  
-  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
-  mcmc.obj <- tmbstan(obj=obj,
-                      lower=rep(-Inf,length(unlist(parlist))),
-                      upper=rep(Inf,length(unlist(parlist))),
-                      silent=T,laplace=F,
-                      chains=mcmc.control$nchains,
-                      warmup=mcmc.control$warmup,
-                      iter=mcmc.control$iter,
-                      # init='random'
-                      init='last.par.best' # start from MLE above
-  )
-  
-  # traceplot(mcmc.obj, pars=c('logmuinf','logK'), inc_warmup=TRUE) # check conv
-  # pairs(mcmc.obj, pars=c('logmuinf','logK')) # post dist and scatterplots
-  # # ^ Linf and K typically correlate a lot (negatively), but not so linearly
-  
-  # extract MCMC post draws for derived quantities specified in obj's REPORT
-  mcmc.post <- as.matrix(mcmc.obj)
-  mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
-  for (i in 1:nrow(mcmc.post)){
-    mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('muinf','K')])
-  }
-  # colMeans(mcmc.est) # post means for Linf and K
-  
-  
-  ### output
-  res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),
-              'par.TMB'=theta.tmb,
-              'se'=c(sqrt(var(mcmc.est[,1])),  # /length(mcmc.est[,1])
-                     sqrt(var(mcmc.est[,2]))), # /length(mcmc.est[,2])
-              'se.TMB'=se.theta.tmb#,
-              # 'other.par'=theta[-c(1,3)],'other.par.se'=se.theta[-c(1,3)],
-  )
-  names(res$par) <- c('Linf','K')
-  names(res$par.TMB) <- c('Linf','K')
-  names(res$se) <- c('Linf','K')
-  names(res$se.TMB) <- c('Linf','K')
-  
-  if (output.post.draws){
-    # if (onlyTMB){
-    #   warning('Cannot output posterior draws if onlyTMB=TRUE.')
-    # } else {
-    res$post.draws <- list('Linf'=mcmc.est[,1],'K'=mcmc.est[,2])
-    # res$post.draws <- as.list(mcmc.post)
-    # }
-  }
-  
-  # if (!onlyTMB){ # equal-tailed 95% credible intervals based on MCMC draws
-  res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
-                       'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
-  # }
-  
-  res$value.TMB <- opt$obj
-  res$conv.TMB <- opt$mess
-  
-  return(res)
-}
 
 
 
@@ -565,255 +479,7 @@ Bfa65 <- function(par,L1,L2,deltaT,
 
 
 
-#///////////////////////////////////////////////////////////////////////////////
-#### zh09: Zhang, Lessard and Campbell (2009), Bayesian ####
-#///////////////////////////////////////////////////////////////////////////////
 
-zh09 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',compute.se=T,
-                 rand.ini=list(perform=F,'n'=10,'radius'=0.1),
-                 onlyTMB=F,output.post.draws=F,lb.sd=NULL,enablepriors=1,
-                 mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
-  # uniform priors with user-supplied hyperparam
-  # hyperpar=list(lbubmuinf,lbubK) for consistency across methods, while bounds
-  # for sigma are hard-coded below.
-  # lb.sd = lower bound for sigmainf, sigmaK and sigmaeps, in TMB optim only
-  
-  ### setup
-  if (is.null(hyperpar)){
-    stop('hyperpar must be supplied as list(c(lb,ub),c(lb,ub)) respectively for
-         Linf and K.')
-  }
-  if (!compute.se){warning('se will be computed anyway.')}
-  
-  length.theta <- 7
-  n <- length(L1)
-  rad <- rand.ini$radius
-  datalist <- list('L1'=L1,'L2'=L2,
-                   # 'T1'=T1,'T2'=T2,
-                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
-                   'lbubmuinf'=hyperpar[[1]], # user-supplied
-                   'lbubK'=hyperpar[[2]], # user-supplied
-                   'lbubgammashapeA'=c(1e-3,1000),
-                   'lbubgammarateA'=c(1e-3,1000),
-                   'lbubsigmainf'=c(1e-10,1e4),
-                   'lbubsigmaK'=c(1e-10,1e4),
-                   'lbubsigmaeps'=c(1e-10,1e4),
-                   'enablepriors'=enablepriors)
-  
-  ### TMB optimization and sdreport
-  if (meth!='nlminb'){stop('Only meth="nlminb" is allowed for now.')}
-  
-  if (is.null(lb.sd)){
-    lb.par <- rep(-Inf,length.theta) # no bounds
-  } else {
-    lb.par <- c(-Inf,log(lb.sd),-Inf,log(lb.sd),-Inf,-Inf,log(lb.sd))
-    # ^ helps if data too close to pure vB, otherwise Hessian not pos def
-  }
-  
-  if (rand.ini$perform){ # try multiple sets of random initial values
-    it.ini <- 1
-    obj <- NULL
-    opt <- NULL
-    while (it.ini <= rand.ini$n){
-      parlist <- list('logmuinf'=log(par[1])+runif(1,-rad,rad),
-                      'logsigmainf'=runif(1,-rad,rad),
-                      'logmuK'=log(par[2])+runif(1,-rad,rad),
-                      'logsigmaK'=runif(1,-rad,rad),
-                      'logmuA'=1+runif(1,-rad,rad),
-                      'logsigmaA'=runif(1,-rad,rad),
-                      'logsigmaeps'=runif(1,-rad,rad),
-                      'logLinf'=rep(log(par[1]),n)+runif(n,-rad,rad),
-                      'logK'=rep(log(par[2]),n)+runif(n,-rad,rad),
-                      'logA'=rep(1,n)+runif(n,-rad,rad)) # jittering
-      obj0 <- MakeADFun(data=datalist,parameters=parlist,
-                        random=c('logLinf','logK','logA'),
-                        DLL="Zhang",silent=T)
-      opt0 <- try(nlminb(start=obj0$par,obj=obj0$fn,gr=obj0$gr,
-                         control=list(eval.max=5000,iter.max=5000),
-                         lower=lb.par),T)
-      if (!is(opt0,'try-error')){
-        if (opt0$conv%in%c(0,1)){ # opt0$conv==0 too strict
-          if (is.null(obj)){ # then no good conv so far, keep this one
-            obj <- obj0
-            opt <- opt0
-          } else if (opt0$obj < opt$obj){ # then compare to best conv so far
-            obj <- obj0
-            opt <- opt0
-          }
-        }
-      }
-      it.ini <- it.ini+1
-    }
-    if (is.null(obj)){
-      stop('Fitting did not converge, try more random initial values.')
-    } else {
-      rep <- sdreport(obj)
-      summary.rep <- summary(rep)
-      theta.tmb <- summary.rep[c('muinf','K'),1]
-      se.theta.tmb <- summary.rep[c('muinf','K'),2]
-      val.tmb <- opt$obj # obj$fn()
-    }
-  } else { # single set of non-random initial values
-    parlist <- list('logmuinf'=log(par[1]),
-                    'logsigmainf'=0,
-                    'logmuK'=log(par[2]),
-                    'logsigmaK'=0,
-                    'logmuA'=1,
-                    'logsigmaA'=0,
-                    'logsigmaeps'=0,
-                    'logLinf'=rep(log(par[1]),n),
-                    'logK'=rep(log(par[2]),n),
-                    'logA'=rep(1,n)) # no jittering
-    obj <- MakeADFun(data=datalist,parameters=parlist,
-                     random=c('logLinf','logK','logA'),
-                     DLL="Zhang",silent=T)
-    opt <- try(nlminb(start=obj$par,obj=obj$fn,gr=obj$gr,
-                      control=list(eval.max=5000,iter.max=5000),
-                      lower=lb.par),T)
-    if (is(opt,'try-error')){
-      stop('Optimization failed, try random initial values.')
-    }
-    rep <- sdreport(obj)
-    summary.rep <- summary(rep)
-    theta.tmb <- summary.rep[c('muinf','K'),1]
-    se.theta.tmb <- summary.rep[c('muinf','K'),2]
-    # val.tmb <- opt$obj # obj$fn()
-    # mess.tmb <- opt$mess
-  }
-  
-  ### MCMC based on tmbstan::tmbstan, by default uses NUTS
-  if (!onlyTMB){
-    mcmc.obj <- tmbstan(obj=obj,
-                        lower=rep(-Inf,length(unlist(parlist))),
-                        upper=rep(Inf,length(unlist(parlist))),
-                        silent=T,laplace=F,
-                        chains=mcmc.control$nchains,
-                        warmup=mcmc.control$warmup,
-                        iter=mcmc.control$iter,
-                        # init='random'
-                        init='last.par.best' # start from MLE above
-    )
-    
-    # traceplot(mcmc.obj, pars=c('logmuinf','logmuK'), inc_warmup=TRUE) # check conv
-    # pairs(mcmc.obj, pars=c('logmuinf','logmuK')) # post dist and scatterplots
-    
-    # extract MCMC post draws for derived quantities specified in obj's REPORT
-    mcmc.post <- as.matrix(mcmc.obj)
-    mcmc.est <- matrix(NA_real_,nrow=nrow(mcmc.post),ncol=2) # only Linf and K
-    for (i in 1:nrow(mcmc.post)){
-      mcmc.est[i,] <- unlist(obj$report(mcmc.post[i,-ncol(mcmc.post)])[c('muinf','muK')])
-    }
-    # colMeans(mcmc.est) # post means for (expectation of) Linf and K
-    
-    res <- list('par'=c(mean(mcmc.est[,1]),mean(mcmc.est[,2])),'par.TMB'=theta.tmb,
-                'se'=c(sqrt(var(mcmc.est[,1])),  # /length(mcmc.est[,1])
-                       sqrt(var(mcmc.est[,2]))), # /length(mcmc.est[,2])
-                'se.TMB'=se.theta.tmb)
-    names(res$par) <- c('Linf','K')
-    names(res$par.TMB) <- c('Linf','K')
-    names(res$se) <- c('Linf','K')
-    names(res$se.TMB) <- c('Linf','K')
-  } else {
-    res <- list('par'=c(NA,NA),'par.TMB'=theta.tmb,
-                'se'=c(NA,NA),'se.TMB'=se.theta.tmb)
-    names(res$par.TMB) <- c('Linf','K')
-    names(res$se.TMB) <- c('Linf','K')
-  }
-  
-  ### output
-  if (output.post.draws){
-    if (onlyTMB){
-      warning('Cannot output posterior draws if onlyTMB=TRUE.')
-    } else {
-      res$post.draws <- list('Linf'=mcmc.est[,1],'K'=mcmc.est[,2])
-      # res$post.draws <- as.list(mcmc.post)
-    }
-  }
-  if (!onlyTMB){ # equal-tailed 95% credible intervals based on MCMC draws
-    res$cred.int <- list('Linf'=quantile(mcmc.est[,1],probs=c(0.025,0.975)),
-                         'K'=quantile(mcmc.est[,2],probs=c(0.025,0.975)))
-  }
-  
-  res$value.TMB <- opt$obj
-  res$conv.TMB <- opt$mess
-  
-  return(res)
-}
-
-
-#///////////////////////////////////////////////////////////////////////////////
-#### la02: Laslett, Eveson and Polacheck (2002) ####
-#///////////////////////////////////////////////////////////////////////////////
-
-la02 <- function(par,L1,L2,deltaT,hyperpar=NULL,meth='nlminb',
-                 compute.se=T,enable.priors=F,lb.sd=NULL){
-  # uniform priors with user-supplied hyperparam
-  # hyperpar=list(lbubmuinf,lbubK) for consistency across methods, while bounds
-  # for lbubsigmainf, lbubmuA, lbubsigmaA and lbubsigmaeps are hard-coded below.
-  # lb.sd = lower bound for sigmainf and sigmaeps, in TMB optimization only
-  
-  ### setup
-  if (is.null(hyperpar)){
-    if (enable.priors){ # then hyperpar must be supplied
-      stop('hyperpar must be supplied as list(c(lb,ub),c(lb,ub)) respectively for
-         the mean of Linf and for K.')
-    } else { # then set arbitrary values for hyperpar, ignored in TMB
-      hyperpar <- list(c(0,1),c(0,1))
-    }
-  }
-  if (!compute.se){warning('se will be computed anyway.')}
-  
-  n <- length(L1)
-  parlist <- list('logmuinf'=log(par[1]),'logsigmainf'=0,
-                  'logK'=log(par[2]),
-                  'logmuA'=1,'logsigmaA'=0,
-                  'logsigmaeps'=0,
-                  'logLinf'=rep(log(par[1]),n),
-                  'logA'=rep(1,n))
-  length.theta <- 6
-  datalist <- list('L1'=L1,'L2'=L2,
-                   # 'T1'=T1,'T2'=T2,
-                   'deltaT'=deltaT, # as of v0.3: directly supply deltaT
-                   'lbubmuinf'=hyperpar[[1]], # user-supplied
-                   'lbubK'=hyperpar[[2]], # user-supplied
-                   'lbubsigmainf'=c(1e-10,1e4),
-                   'lbubmuA'=c(1e-10,1000),
-                   'lbubsigmaA'=c(1e-10,1e4),
-                   'lbubsigmaeps'=c(1e-10,1e4),
-                   'enablepriors'=as.integer(enable.priors))
-  obj <- MakeADFun(data=datalist,parameters=parlist,
-                   random=c('logLinf','logA'),
-                   DLL="Laslett",silent=T)
-  
-  ### optimization and sdreport
-  if (meth=='nlminb'){
-    if (is.null(lb.sd)){
-      lb.par <- rep(-Inf,length.theta) # no bounds
-    } else {
-      lb.par <- c(-Inf,log(lb.sd),-Inf,-Inf,-Inf,log(lb.sd))
-      # ^ helps if data too close to pure vB, otherwise Hessian not pos def
-    }
-    opt <- nlminb(start=obj$par,obj=obj$fn,gr=obj$gr,
-                  control=list(eval.max=5000,iter.max=5000),lower=lb.par)
-    rep <- sdreport(obj)
-    summary.rep <- summary(rep)
-  } else {stop('Only meth="nlminb" is allowed for now.')}
-  
-  ### output
-  theta <- summary.rep[(length.theta+2*n+1):(2*length.theta+2*n),1]
-  se.theta <- summary.rep[(length.theta+2*n+1):(2*length.theta+2*n),2]
-  res <- list('par'=theta[c(1,3)],'se'=se.theta[c(1,3)],
-              'other.par'=theta[-c(1,3)],'other.par.se'=se.theta[-c(1,3)],
-              'random.effects'=list(
-                'Linf'=summary.rep[dimnames(summary.rep)[[1]]=='Linf',1],
-                'se.Linf'=summary.rep[dimnames(summary.rep)[[1]]=='Linf',2],
-                'A'=summary.rep[dimnames(summary.rep)[[1]]=='A',1],
-                'se.A'=summary.rep[dimnames(summary.rep)[[1]]=='A',2]),
-              'value'=obj$fn(),'conv'=opt$mess)
-  names(res$par) <- c('Linf','K')
-  names(res$se) <- c('Linf','K')
-  return(res)
-}
 
 
 #///////////////////////////////////////////////////////////////////////////////
@@ -1848,219 +1514,7 @@ fr88.minAIC <- function(par,L1,L2,deltaT,
 
 
 
-#///////////////////////////////////////////////////////////////////////////////
-#### oldfr88: Francis (1988) following old paradigm ####
-#///////////////////////////////////////////////////////////////////////////////
 
-oldfr88 <- function(par,L1,L2,deltaT,sdfunc='prop.dL',meth='nlminb',
-                    try.many.ini=T,grotag.ini=F,compute.se=T,tol.sd=1e-4){
-  # par argument now necessary, used as first ini to try and only one if
-  # try.many.ini=F
-  
-  ### objective function
-  nll <- function(par,alpha,beta,deltaT,L1,L2,sdfunc,tol.sd){
-    # par=c(ga,gb,log(nu))
-    ga <- par[1]
-    gb <- par[2]
-    # nu <- par[3] # sd = nu*mu, Francis' eq. (5)
-    nu <- exp(par[3]) # est on log scale because > 0
-    
-    Linf <- (beta*ga-alpha*gb)/(ga-gb)
-    expmK <- 1 + (ga-gb)/(alpha-beta) # exp(-K)
-    
-    if (sdfunc=='const'){ # constant sd across all obs = Fabens
-      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
-      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu, log=T))
-    } else if (sdfunc=='prop.L2'){ # sd proportional to expec length at recap
-      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
-      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu*mean.L2, log=T))
-    } else if (sdfunc=='prop.dL'){ # sd proportional to expec deltaL
-      # Francis' eq (5) with mu = expec deltaL
-      mean.dL <- (Linf-L1)*(1-expmK^deltaT) # Francis' eq. (2)
-      posdL <- ifelse(mean.dL>0, mean.dL, tol.sd) # in case of neg growth
-      nll <- -sum(dnorm(x=L2-L1, mean=mean.dL, sd=nu*posdL, log=T))
-    } else if (sdfunc=='prop.dT'){ # sd proportional to time at liberty
-      # cf. Francis (1988) remarks in Intro on p. 43
-      mean.L2 <- L1 + (Linf-L1)*(1-expmK^deltaT)
-      nll <- -sum(dnorm(x=L2, mean=mean.L2, sd=nu*deltaT, log=T))
-    } else {
-      stop('sdfunc can only be "const", "prop.L2", "prop.dL", or "prop.dT".')
-    }
-    
-    # deltaL <- L2-L1
-    # mu <- ((beta*ga-alpha*gb)/(ga-gb)-L1)*(1-(1+(ga-gb)/(alpha-beta))^deltaT)
-    # # ^ Francis' eq. (2)
-    # std.dev <- nu*ifelse(mu>0, mu, tol.sd) # Francis' eq. (5)
-    # pllvec <- dnorm(deltaL, mean=mu, sd=std.dev, log=T)
-    
-    return(nll) # negloglik
-  }
-  
-  ### setup
-  alpha <- as.numeric(quantile(L1,0.1))
-  beta <- as.numeric(quantile(L1,0.9))
-  # deltaL <- as.numeric(L2-L1)
-  # deltaT <- as.numeric(T2-T1) # as of v0.3: directly supply deltaT
-  
-  ### optimization with supplied par ini
-  par.ini <- c((par[1]-alpha)*(1-exp(-par[2])), # g.alpha
-               (par[1]-beta)*(1-exp(-par[2])),  # g.beta
-               0)                               # log(nu)
-  # ^ transform (Linf,K) into (ga,gb), hardcoded ini value for nu on log scale
-  
-  lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log scale
-  ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log scale
-  # ^ lower and upper bounds, from fishmethods::grotag
-  
-  if (meth=='nlminb'){
-    opt <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
-                  alpha=alpha,beta=beta,
-                  L1=L1,L2=L2,deltaT=deltaT,
-                  sdfunc=sdfunc,tol.sd=tol.sd)
-    opt$value <- opt$obj
-  } else if (meth=='L-BFGS-B'){
-    opt <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
-                 method='L-BFGS-B',hessian=F, # only compute hess if compute.se=T
-                 alpha=alpha,beta=beta,
-                 L1=L1,L2=L2,deltaT=deltaT,
-                 sdfunc=sdfunc,tol.sd=tol.sd)
-  } else {stop('Only "nlminb" and "L-BFGS-B" are allowed for meth.')}
-  
-  
-  ### optional: try many different starting values, opt not convex
-  if (try.many.ini){ # then try supplied par and other ini
-    if (grotag.ini){ # then try ini as in fishmethods::grotag, with data subsets
-      coef.subs <- list(c(0.7,1.3),c(0.8,1.2),c(0.9,1.1),c(0.95,1.05),c(0.99,1.01))
-      # ^ gradually shrinking subsets of data to compute ini, original=c(0.8,1.2)
-      
-      optval1 <- opt$value # neg loglik value in first opt
-      opt1 <- opt
-      optval0 <- optval1+1
-      it.ini <- 1L # to keep track of all ini tried in coef.subs
-      while (optval1<optval0 & it.ini<=length(coef.subs)){
-        # keep shrinking subset for ini as long as optval decreases
-        opt0 <- opt1
-        optval0 <- optval1
-        
-        subs.a <- which(L1>(coef.subs[[it.ini]][1]*alpha)
-                        & L1<(coef.subs[[it.ini]][2]*alpha)
-                        & deltaT>median(deltaT))
-        # if (length(subs.a)==0){ # empty subset
-        #   subs.a <- which(L1>(0.7*alpha) & L1<(1.3*alpha) & deltaT>median(deltaT))
-        # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
-        subs.b <- which(L1>(coef.subs[[it.ini]][1]*beta)
-                        & L1<(coef.subs[[it.ini]][2]*beta)
-                        & deltaT>median(deltaT))
-        # if (length(subs.b)==0){ # empty subset
-        #   subs.b <- which(L1>(0.5*beta) & L1<(1.3*beta) & deltaT>median(deltaT))
-        # } # ^ ad hoc but should work on most cases, NBG as long as non-empty subset
-        
-        if (length(subs.a)==0 | length(subs.b)==0){ # empty subset, no ini
-          optval1 <- optval0 # no improvement, stop
-        } else { # subsets not empty, ini computable
-          deltaL <- as.numeric(L2-L1)
-          ga.ini <- mean(deltaL[subs.a]/deltaT[subs.a])
-          gb.ini <- mean(deltaL[subs.b]/deltaT[subs.b])
-          par.ini <- c(ga.ini, gb.ini, 0) # hardcoded ini value for nu, log scale
-          
-          lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log
-          ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log
-          # ^ lower and upper bounds adapted from fishmethods::grotag
-          
-          if (meth=='nlminb'){
-            opt1 <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
-                           alpha=alpha,beta=beta,
-                           L1=L1,L2=L2,deltaT=deltaT,
-                           sdfunc=sdfunc,tol.sd=tol.sd)
-            opt1$value <- opt1$obj
-          } else if (meth=='L-BFGS-B'){
-            opt1 <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
-                          method='L-BFGS-B',hessian=F, # compute hess if compute.se=T
-                          alpha=alpha,beta=beta,
-                          L1=L1,L2=L2,deltaT=deltaT,
-                          sdfunc=sdfunc,tol.sd=tol.sd)
-          }
-          optval1 <- opt1$value
-        }
-        it.ini <- it.ini+1L
-      }
-      
-      if (optval1>optval0){ # then last coef.subs worse than previous
-        opt1 <- opt0
-      }
-      if (opt1$val<opt$value){
-        opt <- opt1 # overwrite if any improvement over first
-      }
-    } else { # then use my better ini, no subsets
-      # ini for ga and gb based on Linf = max obs length at recap, and K = vB eq
-      # for obs lengths with deltaT closest to 1 and using Linf = max obs length
-      
-      ind.dt1 <- which.min(abs(deltaT-1)) # obs with deltaT closest to 1
-      ga.ini <- (max(L2)-alpha)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
-      gb.ini <- (max(L2)-beta)*(L2[ind.dt1]-L1[ind.dt1])/(max(L2)-L1[ind.dt1])
-      par.ini <- c(ga.ini, gb.ini, 0) # hardcoded ini value for nu, log scale
-      
-      lb <- c(0.5*par.ini[1], 0.5*par.ini[2], -10) # hardcoded lb for nu, log
-      ub <- c(1.5*par.ini[1], 1.5*par.ini[2],  10) # hardcoded ub for nu, log
-      # ^ lower and upper bounds adapted from fishmethods::grotag
-      
-      if (meth=='nlminb'){
-        opt1 <- nlminb(start=par.ini,objective=nll,lower=lb,upper=ub,
-                       alpha=alpha,beta=beta,
-                       L1=L1,L2=L2,deltaT=deltaT,
-                       sdfunc=sdfunc,tol.sd=tol.sd)
-        opt1$value <- opt1$obj
-      } else if (meth=='L-BFGS-B'){
-        opt1 <- optim(par=par.ini,fn=nll,lower=lb,upper=ub,
-                      method='L-BFGS-B',hessian=F, # compute hess if compute.se=T
-                      alpha=alpha,beta=beta,
-                      L1=L1,L2=L2,deltaT=deltaT,
-                      sdfunc=sdfunc,tol.sd=tol.sd)
-      }
-      
-      if (opt1$val < opt$val){ # then improves over first opt with supplied ini
-        opt <- opt1
-      }
-    }
-  } # otherwise only use supplied par as ini
-  
-  
-  ### optional: compute standard errors
-  if (compute.se){
-    hess <- optimHess(par=opt$par[1:2],
-                      fn=function(ga.gb,nu,alpha,beta,deltaT,L1,L2,sd,tol.sd){
-                        nll(c(ga.gb,nu),alpha,beta,deltaT,L1,L2,sd,tol.sd)},
-                      nu=opt$par[3],alpha=alpha,beta=beta,L1=L1,L2=L2,
-                      deltaT=deltaT,sd=sdfunc,tol.sd=tol.sd)
-    # } # ^ Hessian wrt ga and gb only, nu held fixed, more stable
-    ga <- opt$par[1]
-    gb <- opt$par[2]
-    jac.g <- cbind(c(gb*(alpha-beta)/(ga-gb)^2,   # jacobian of transformation
-                     -1/(ga-gb+alpha-beta)),      # from (ga,gb) to (Linf,K) 
-                   c(-ga*(alpha-beta)/(ga-gb)^2,
-                     1/(ga-gb+alpha-beta)))
-    # lazy: numerical Hessian instead of analytical Fisher info of (ga,gb,nu)
-    # (same laziness as in fishmethods::grotag)
-    varcov <- t(jac.g)%*%solve(hess[1:2,1:2])%*%jac.g # delta method
-    # ^ nu ignored in varcov, because Hessian rarely pos def with it
-    se <- sqrt(diag(varcov))
-  } else {
-    hess <- NA
-    se <- c(NA,NA)
-  }
-  
-  ### output
-  Linf <- (beta*opt$par[1] - alpha*opt$par[2])/(opt$par[1]-opt$par[2])
-  K <- -log(1+(opt$par[1]-opt$par[2])/(alpha-beta))
-  names(opt$par) <- c('g.alpha','g.beta','nu')
-  res <- list('par'=c(Linf,K),'value'=opt$value,'conv'=opt$mess,'se'=se,
-              'original.par'=opt$par,'hessian'=hess,
-              'alpha'=alpha,'beta'=beta)
-  names(res$par) <- c('Linf','K')
-  names(res$se) <- c('Linf','K')
-  
-  return(res)
-}
 
 
 #///////////////////////////////////////////////////////////////////////////////

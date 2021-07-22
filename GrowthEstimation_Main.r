@@ -1,24 +1,19 @@
 #///////////////////////////////////////////////////////////////////
-#### GrowthEstimation: compare methods on simulated data v0.4.3 ####
+#### GrowthEstimation: compare methods on simulated data v0.4.4 ####
 #///////////////////////////////////////////////////////////////////
 
 # rm(list=ls())
 
 ### // setup ----
-require(TMB) # needed for zh09, la02, Bfa65 and Bla02
-require(tmbstan)
-# ^ for tmbstan function for MCMC on TMB obj, calls rstan, needed for Bfa65,
-#   Bla02 and zh09
+require(TMB)     # needed for Bayesian methods
+require(tmbstan) # needed for Bayesian methods
+# ^ for tmbstan function for MCMC on TMB obj, calls rstan
 
 compile("FabensBayesian.cpp") # only need to run once
 compile("FrancisBayesian.cpp") # only need to run once
-compile("Laslett.cpp") # only need to run once
-compile("Zhang.cpp") # only need to run once
 
 dyn.load(dynlib("FabensBayesian")) # to run for every new R session
 dyn.load(dynlib("FrancisBayesian")) # to run for every new R session
-dyn.load(dynlib("Laslett")) # to run for every new R session
-dyn.load(dynlib("Zhang")) # to run for every new R session
 
 source('GrowthEstimation_CapRecapSim.r') # simulates lengths at cap and recap
 source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
@@ -28,11 +23,9 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 #  - fa65: Fabens (1965)
 #  - fr88: Francis (1988), with fr88.minAIC for selecting best sub-model
 #  - ja91: James (1991)
-#  - la02: Laslett, Eveson and Polacheck (2002)
-#  - zh09: Zhang, Lessard and Campbell (2009), Bayesian
 #  - Bfa65: Bayesian version of Fabens (1965)
 #  - Br88: Bayesian version of Francis (1988), "our take"
-#  - Bla02: Bayesian version of Laslett, Eveson and Polacheck (2002)
+
 
 # All methods take the exact same mandatory arguments:
 #  - par: vector of length 2, starting values for Linf and K (in that order)
@@ -40,11 +33,7 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 #  - L2: vector of lengths at recap
 #  - deltaT: vector of time intervals between cap and recap
 
-# In addition, the 2 Bayesian methods zh09 and Bla02 require:
-#  - hyperpar: a list of two numeric vectors, both of length 2, containing the
-#              lower and upper bounds (in that order) for uniform priors on Linf
-#              and K.
-# while the Bayesian method Bfa65 requires:
+# In addition, the Bayesian methods requires:
 #  - priordist: a character string specifying the prior distributions on Linf, K,
 #               and sigma (the sd of the iid Gaussian additive error on deltaL),
 #               choice among "uniform", "normal" (equivalent to "Gaussian"), and
@@ -54,7 +43,7 @@ source('GrowthEstimation_Methods.r') # loads TMB package and creates functions
 #              respectively; if priordist="uniform" then these are the lower and
 #              upper bounds, if priordist="normal" then these are the mean and
 #              sd, and if priordist="lognormal" then these are the mean and sd
-#              on the log scale.
+#              on the originals (exponential) scale.
 
 # The methods return different arguments, but they all have:
 #  - $par: the vector of (point) estimates of Linf and K (in that order)
@@ -94,7 +83,10 @@ cbind(c(trueLinf,trueK),
 
 
 ### // compare estimates of (mean) Linf and K among methods ----
-names.est <- c('gh59','fa65','fr88','ja91','la02','zh09','Bfa65','Bla02')
+
+# TODO: adapt demo below since changes in v0.4.4
+
+names.est <- c('gh59','fa65','fr88','ja91','Bfa65')
 n.est <- length(names.est) # number of estimators to compare
 est <- vector('list',n.est)
 
@@ -184,97 +176,6 @@ arrows(x0=1:n.est,x1=1:n.est,angle=90,code=3,length=0.1,
        y0=est.K-2*se.K,y1=est.K+2*se.K)
 abline(h=trueK,col='red')
 par(mfrow=c(1,1))
-
-
-
-#////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation: test compare two population in terms of vB curves ####
-#////////////////////////////////////////////////////////////////////////////
-
-# rm(list=ls())
-
-### // setup ----
-require(TMB) # needed for both LRT and BF
-
-compile("FabensTwoPop.cpp") # only need to run once
-# ^ necessary for likelihood ratio test (LRT) based on Fabens (1965) model
-compile("FabensTwoPopBayesian_M0.cpp") # only need to run once
-compile("FabensTwoPopBayesian_M1.cpp") # only need to run once
-
-dyn.load(dynlib("FabensTwoPop"))            # to run for every new R session
-dyn.load(dynlib("FabensTwoPopBayesian_M0")) # to run for every new R session
-dyn.load(dynlib("FabensTwoPopBayesian_M1")) # to run for every new R session
-# ^ necessary for Bayes factor (BF) based on Bayesian Fabens (1965) formulation
-
-source('GrowthEstimation_Tests.r')
-
-
-### // sim data under exact Fabens formulation, but different pop1/pop2 ----
-n <- 100 # total sample size, nb of capture-recapture pairs
-n1 <- 50 # sample size pop1
-n2 <- n-n1 # sample size pop2
-
-trueLinf1 <- 130 # close to starry smooth-hound Mustelus asterias
-trueK1 <- 0.14 # close to starry smooth-hound Mustelus asterias
-trueLinf2 <- 120 # pop2, slightly smaller than that of pop1
-trueK2 <- 0.15 # pop2, same as pop1
-# ^ pop1 grows slightly larger but slower
-
-sigmaeps1 <- 1 # errror sd, pop1
-sigmaeps2 <- 1 # errror sd, pop2
-
-par.ini <- c(100,0.5) # initial values for Linf and K, somewhat in ballpark
-
-set.seed(1234) # for replicability
-
-Lcap1 <- rnorm(n=n1,mean=60,sd=5) # pop1
-Lcap2 <- rnorm(n=n2,mean=60,sd=5) # pop2
-
-deltaT1 <- rgamma(n=n1,shape=1,scale=1) # in years
-deltaT1 <- ifelse(deltaT1>3,3,deltaT1) # truncate at 3
-deltaT2 <- rgamma(n=n2,shape=1,scale=1) # in years
-deltaT2 <- ifelse(deltaT2>3,3,deltaT2) # truncate at 3
-
-eps1 <- rnorm(n=n1,mean=0,sd=sigmaeps1) # pop1
-eps2 <- rnorm(n=n2,mean=0,sd=sigmaeps2) # pop2
-
-Lrecap1 <- trueLinf1 - (trueLinf1-Lcap1)*exp(-trueK1*deltaT1) + eps1 # pop 1
-Lrecap2 <- trueLinf2 - (trueLinf2-Lcap2)*exp(-trueK2*deltaT2) + eps2 # pop 2
-# ^ both follow the vB curve with some iid Gaussian error on lengths at recap
-
-
-### // compute LRT to compare the two pop in terms of (Linf,K) ----
-LRT_2pop_fa65(par=par.ini,alpha=0.05,
-  L1.pop1=Lcap1,L2.pop1=Lrecap1,deltaT.pop1=deltaT1,
-  L1.pop2=Lcap2,L2.pop2=Lrecap2,deltaT.pop2=deltaT2)
-# ^ test stat > chi^2 critical value or equivalently p-value < alpha
-#   => reject H0 at significance level alpha=0.05, the pair (Linf,K) differs
-#      between the two pop
-
-
-### // set up priors and compute BF ----
-priordist <- c(3L,1L,1L) # 0=no prior, 1=unif, 2=Gaussian, 3=lognormal
-# ^ lognormal on Linf, uniform on K, uniform on sigmaeps
-
-hp.Linf <- c(2*log(par.ini[1])-log(1+par.ini[1]^2)/2, 0.3)
-# ^ lognormal prior meanlog/sdlog
-hp.K <- c(1e-2, 1) # uniform prior lower/upper bound
-hp.sigmaeps <- c(1e-5, 50) # uniform prior lower/upper bound
-# ^ note that (for simplicity) we set the same priors for (Linf,K) under both
-#   M0 and M1 competing models, thus clearly pushing towards M1 a priori
-
-BF_2pop_Bfa65(par=par.ini,
-              L1.pop1=Lcap1,L2.pop1=Lrecap1,deltaT.pop1=deltaT1,
-              L1.pop2=Lcap2,L2.pop2=Lrecap2,deltaT.pop2=deltaT2,
-              priordist.M0=priordist,
-              priordist.M1.pop1=priordist,
-              priordist.M1.pop2=priordist,
-              hyperpar.M0=list(hp.Linf,hp.K,hp.sigmaeps),
-              hyperpar.M1.pop1=list(hp.Linf,hp.K,hp.sigmaeps),
-              hyperpar.M1.pop2=list(hp.Linf,hp.K,hp.sigmaeps))
-# ^ BF very large, notably > 100 so falls in the "Decisive" evidence in favor
-#   of M1 according to table in Kass and Raftery (1995, p. 777, JASA)
-#   => M1 is to be preferred (in spite of priors favoring M0)
 
 
 

@@ -1,4 +1,4 @@
-// Bayesian formulation of Francis (1988) | v0.4.3
+// Bayesian formulation of Francis (1988) | v0.4.4
 // Our take: not use reparametrization in terms of g_alpha and g_beta, only
 //           consider extension of Fabens (1965) with various variance functions
 //           added to basic error sd sigma.

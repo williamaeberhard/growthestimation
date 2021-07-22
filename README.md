@@ -19,7 +19,22 @@ Files contained in this repository:
 
 ### Version History
 
-This is GrowthEstimation version 0.4.3. Changelog since last version:
+This is GrowthEstimation version 0.4.4. Changelog since last version:
+* Adapted GrowthPriors for computation of Linf lognormal prior hyperparameters from supplied Lmax. New mandatory argument is lnorm.coef, a vector of length 2 with default c(1.2, 3), that defines narrow and wide lognormal priors. The lognormal mean parameter on the log scale is computed from the median (meanlog = log(median)), the latter set as Lmax/0.99 (the value for Linf reported so far). The lognormal sd parameter (also on log scale) is such that the 0.99 quantile macthes a given value, this being lnorm.coef[1]*median for the narrow case and lnorm.coef[2]*median for the wide case. The lognormal mean and sd on the original (exponential) scale are then computed from the parameters on the log scale. Additional outputs thus are:
+  - lnorm.meanLinf.narrow: narrow lognormal distribution mean (original scale)
+  - lnorm.sdLinf.narrow: narrow lognormal distribution sd (original scale)
+  - lnorm.meanLinf.wide: wide lognormal distribution mean (original scale)
+  - lnorm.sdLinf.wide: wide lognormal distribution sd (original scale)
+* Removed all statistical tests (LRT and BF) stuff, since not pertaining to Dureuil et al. (2021+) paper. Thus deleted the following files:
+  - GrowthEstimation_Tests.r
+  - FabensTwoPop.cpp
+  - FabensTwoPopBayesian_M0.cpp
+  - FabensTwoPopBayesian_M1.cpp
+* Removed methods that are not used in Dureuil et al. (2021+) paper in the end, i.e. la02, Bla02, zh09, and oldfr88. Thus deleted the following files:
+  - Laslett.cpp
+  - Zhang.cpp
+
+Changelog v0.4.3:
 * LRT_2pop_fa65:
   - now user supplies deltaT (=Trecap-Tcap) rather than the two separate (absolute) times as separate vector. FabensTwoPop.cpp modified too.
   - default values in case par not supplied changed from (0,0) to (1,0.5) and issuing a warning now.
