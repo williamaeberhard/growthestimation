@@ -561,7 +561,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
                   priordist.Linf='lognormal',
                   priordist.K='uniform',
                   priordist.sigma='uniform',
-                  hyperpar=NULL,
+                  hyperpar,
                   varfunc='constant',enablepriorsd=1L,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
@@ -746,8 +746,10 @@ Bfr88 <- function(par,L1,L2,deltaT,
                         chains=mcmc.control$nchains,
                         warmup=mcmc.control$warmup,
                         iter=mcmc.control$iter,
-                        control=list(adapt_delta=0.99, # def=0.8, larger=safer
-                                     max_treedepth=15), # def=10, larger helps
+                        # control=list(adapt_delta=0.99, # def=0.8, larger=safer
+                        #              max_treedepth=15), # def=10, larger helps
+                        control=list(adapt_delta=0.9, # def=0.8, larger=safer
+                                     max_treedepth=20), # def=10, larger helps
                         # init='random'
                         init='last.par.best' # start from MLE above
     )
@@ -976,7 +978,7 @@ Bfr88 <- function(par,L1,L2,deltaT,
   res$AIC <- 2*opt$obj+2*length(opt$par) # output AIC anyway
   res$value.TMB <- opt$obj
   res$conv.TMB <- opt$mess
-
+  
   return(res)
 }
 
@@ -984,20 +986,27 @@ Bfr88 <- function(par,L1,L2,deltaT,
 
 ### wrapper for Bfr88 with model selection by min WAIC/AIC
 Bfr88.minIC <- function(par,L1,L2,deltaT,
-                         priordist.Linf,
-                         priordist.K,
-                         priordist.sigma,
-                         hyperpar,enablepriorsd,
-                         meth,compute.se,
-                         onlyTMB,output.post.draws,
-                         mcmc.control){
+                        priordist.Linf='lognormal',
+                        priordist.K='uniform',
+                        priordist.sigma='uniform',
+                        hyperpar,
+                        enablepriorsd=1L,
+                        varfunc='all',
+                        meth='nlminb',compute.se=T,
+                        onlyTMB=F,output.post.draws=F,
+                        mcmc.control=list('nchains'=5,
+                                          'iter'=20000,'warmup'=10000)){
   # could be improved by setting compute.se=F for all candidate models and
   # separate se comp without estim
   
   # except "constant" (= Fabens), all other variance functions are non-nested,
-  # so simply fit all and keep on with smallest DIC$pV
-  varfunc.charvec <- c("constant","prop.dL","prop.dT","prop.L2",
-                       "exp.dL","exp.L2","pow.dL","pow.L2") # test all by def?
+  # so simply fit all and keep on with smallest WAIC
+  if (any(varfunc=='all')){
+    varfunc.charvec <- c("constant","prop.dL","prop.dT","prop.L2",
+                         "exp.dL","exp.L2","pow.dL","pow.L2") # test all
+  } else { # then assumed subset of variance functions supplied
+    varfunc.charvec <- varfunc
+  }
   fitlist <- vector('list',length(varfunc.charvec))
   
   # wallclock <- proc.time()[3]
@@ -1020,7 +1029,7 @@ Bfr88.minIC <- function(par,L1,L2,deltaT,
   #       sapply(fitlist,'[[','AIC')) # meaningful only if frequentist est
   
   if (!all(c(priordist.Linf,priordist.K,priordist.sigma)%in%
-      c('uniform','normal','Gaussian','lognormal')) |
+           c('uniform','normal','Gaussian','lognormal')) |
       !as.logical(enablepriorsd) | onlyTMB){
     # then consider est as frequentist and use AIC for model selection
     ind.best <- which.min(sapply(fitlist,'[[','AIC')) # AIC
