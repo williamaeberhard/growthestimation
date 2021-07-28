@@ -1,26 +1,23 @@
 GrowthEstimation: R code for various estimation methods of von Bertalanffy growth parameters 
 --------------------------------------------------------------------------------------------
 
-These R scripts provide functions for estimating the von Bertalanffy growth parameters (Linf and K) from mark-recapture data. These allow to replicate the results in the simulation study of Dureuil et al. (2021+), including the CapRecapSim R function to simulate mark-recapture data under various scenarios.
+These R scripts provide functions for estimating the von Bertalanffy (vB) growth parameters (Linf and K) from mark-recapture data. These allow to replicate the results in the simulation study of Dureuil et al. (2021+), including the CapRecapSim R function to simulate mark-recapture data under various scenarios.
 
 
 ### Contents
 
 Files contained in this repository:
-* GrowthEstimation_Main.r: the main R script to run, loading all required libraries, compiling the Template Model Builder (TMB) C++ templates, simulating data and estimating the von Bertalanffy growth parameters according to various methods as in Dureuil et al. (2020+);
+* GrowthEstimation_Main.r: the main R script to run, loading all required libraries, compiling the Template Model Builder (TMB) C++ templates, simulating data and estimating the vB growth parameters according to various methods as in Dureuil et al. (2021+);
 * GrowthEstimation_Methods.r: an R script to source to create functions corresponding to all the estimation methods under study;
-* GrowthEstimation_CapRecapSim.r: an R script to source to create the CapRecapSim function that simulated mark-recapture data according to various scenarios;
-* FabensBayesian.cpp, Laslett.cpp, Zhang.cpp: C++ scripts to compile with the R package TMB;
-* GrowthEstimation_Tests.r: an R script defining a likelihood ratio test (LRT) and a (Laplace-approximated) Bayes factor for comparing two independent populations in terms of their (Linf,K) parameters according to the (frequentist) Fabens (1965) method and its Bayesian formulation;
-* FabensTwoPop.cpp: a C++ script to compile for the LRT comparing two populations;
-* FabensTwoPopBayesian_M0.cpp and FabensTwoPopBayesian_M1.cpp: C++ scripts to compile for the Bayes factor comparing two populations;
+* GrowthEstimation_CapRecapSim.r: an R script to source to create the CapRecapSim function which simulates mark-recapture data according to various scenarios;
+* FabensBayesian.cpp, FrancisBayesian.cpp: C++ scripts to compile with the R package TMB, see the Main script;
 * this README file.
 
 
 ### Version History
 
 This is GrowthEstimation version 0.4.4. Changelog since last version:
-* Adapted GrowthPriors for computation of Linf lognormal prior hyperparameters from supplied Lmax. New mandatory argument is lnorm.coef, a vector of length 2 with default c(1.2, 3), that defines narrow and wide lognormal priors. The lognormal mean parameter on the log scale is computed from the median (meanlog = log(median)), the latter set as Lmax/0.99 (the value for Linf reported so far). The lognormal sd parameter (also on log scale) is such that the 0.99 quantile macthes a given value, this being lnorm.coef[1]*median for the narrow case and lnorm.coef[2]*median for the wide case. The lognormal mean and sd on the original (exponential) scale are then computed from the parameters on the log scale. Additional outputs thus are:
+* Adapted GrowthPriors for computation of Linf lognormal prior hyperparameters from supplied Lmax. New mandatory argument is lnorm.coef, a vector of length 2 with default c(1.2, 3), that defines narrow and wide lognormal priors. The lognormal mean parameter on the log scale is computed from the median (meanlog = log(median)), the latter set as Lmax/0.99 (the value for Linf reported so far). The lognormal sd parameter (also on log scale) is such that the 0.99 quantile matches a given value, this being lnorm.coef[1]*median for the narrow case and lnorm.coef[2]*median for the wide case. The lognormal mean and sd on the original (exponential) scale are then computed from the parameters on the log scale. Additional outputs thus are:
   - lnorm.meanLinf.narrow: narrow lognormal distribution mean (original scale)
   - lnorm.sdLinf.narrow: narrow lognormal distribution sd (original scale)
   - lnorm.meanLinf.wide: wide lognormal distribution mean (original scale)
