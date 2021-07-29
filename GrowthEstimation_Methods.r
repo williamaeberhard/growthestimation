@@ -2,8 +2,73 @@
 #### GrowthEstimation v0.4.4 ####
 #///////////////////////////////////////////////////////////////////////////////
 
+
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthPriors: uniform prior lower/upper bounds for Linf and K  ####
+#### hp.normal and hp.lognormal: prior hyperparameters for Linf and K ####
+#///////////////////////////////////////////////////////////////////////////////
+
+hp.normal <- function(median, upper.bound, plot=T){
+  sd <- (upper.bound-median)/qnorm(0.99)
+  # ub=0.99 quantile, mean=median for Gaussian dist
+  
+  if (plot){
+    xgrid <- seq(qnorm(1e-3,mean=median,sd=sd),
+                 qnorm(1-1e-3,mean=median,sd=sd),length.out=200)
+    plot(xgrid,dnorm(xgrid,mean=median,sd=sd),type='l',
+         xlab='',ylab='Normal pdf')
+    abline(v=median,col='red',lty=2)
+    text(x=median,y=0,labels='median',pos=4,col='red',cex=0.6)
+    abline(v=qnorm(c(0.99),mean=median,sd=sd),col='red',lty=2)
+    text(x=qnorm(0.99,mean=median,sd=sd),y=1/sqrt(2*pi)/sd,
+         labels='upper bound = 0.99 quantile',
+         pos=2,col='red',cex=0.6)
+    abline(v=qnorm(0.01,mean=median,sd=sd),lty=2)
+    text(x=qnorm(0.01,mean=median,sd=sd),y=1/sqrt(2*pi)/sd,
+         labels=paste0('0.01 quantile ~= ',
+                       round(qnorm(0.01,mean=median,sd=sd),2)),
+         pos=4,cex=0.6)
+  }
+  
+  return(c('mean'=median,'sd'=sd))
+}
+
+hp.lognormal <- function(median, upper.bound, plot=T, interval.sdlog=c(1e-5,5)){
+  meanlog <- log(median) # lognormal median = exp(meanlog)
+  
+  diffq <- function(sdlog,q,meanlog,prob=0.99){
+    qlnorm(p=prob,meanlog=meanlog,sdlog=sdlog)-q
+  }
+  
+  sdlog <- uniroot(f=diffq,interval=interval.sdlog,
+                   q=upper.bound,meanlog=meanlog)$root
+  
+  if (plot){
+    xgrid <- seq(qlnorm(1e-3,meanlog=meanlog,sdlog=sdlog),
+                 qlnorm(1-1e-3,meanlog=meanlog,sdlog=sdlog),length.out=200)
+    plot(xgrid,dlnorm(xgrid,meanlog=meanlog,sdlog=sdlog),type='l',
+         xlab='',ylab='Lognormal pdf')
+    abline(v=median,col='red',lty=2)
+    text(x=median,y=0,labels='median',pos=4,col='red',cex=0.6)
+    abline(v=qlnorm(0.99,meanlog=meanlog,sdlog=sdlog),col='red',lty=2)
+    text(x=upper.bound,y=1/sqrt(2*pi)/sdlog*exp(sdlog^2/2 - meanlog),
+         labels='upper bound = 0.99 quantile',
+         pos=2,col='red',cex=0.6)
+    abline(v=qlnorm(0.01,meanlog=meanlog,sdlog=sdlog),lty=2)
+    text(x=qlnorm(0.01,meanlog=meanlog,sdlog=sdlog),
+         y=1/sqrt(2*pi)/sdlog*exp(sdlog^2/2 - meanlog),
+         labels=paste0('0.01 quantile\n~= ',
+                       round(qlnorm(0.01,meanlog=meanlog,sdlog=sdlog),2)),
+         pos=4,cex=0.6)
+  }
+  
+  return(c('mean'=exp(meanlog+sdlog^2/2), # expectation ori scale
+           'sd'=sqrt(exp(sdlog^2-1)*exp(2*meanlog+sdlog^2)))) # sd ori scale
+}
+
+
+
+#///////////////////////////////////////////////////////////////////////////////
+#### GrowthPriors: prior hyperparameters for Linf and K from fishbase ####
 #///////////////////////////////////////////////////////////////////////////////
 
 

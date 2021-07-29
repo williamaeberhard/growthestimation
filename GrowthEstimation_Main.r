@@ -133,6 +133,7 @@ hplist <- list(c(120,40), # hyperpar for Linf: lognormal mean and sd (exp scale)
                c(0,2),    # hyperpar for K: uniform lower and upper bound
                c(0,50)    # hyperpar for sigma: uniform lower and upper bound
 )
+# ^ arbitrary reasonable values supplied here for the sake of the demo
 
 Linf.meanlog <- 2*log(hplist[[1]][1])-log(hplist[[1]][2]^2+hplist[[1]][1]^2)/2
 Linf.sdlog <- sqrt(-2*log(hplist[[1]][1]) +
@@ -141,7 +142,7 @@ Linf.sdlog <- sqrt(-2*log(hplist[[1]][1]) +
 
 plot(seq(0.5,300,0.5),
      dlnorm(seq(0.5,300,0.5),meanlog=Linf.meanlog,sdlog=Linf.sdlog),type='l')
-abline(v=trueLinf,col='red')
+abline(v=trueLinf,col='blue')
 # ^ lognormal prior density on Linf and true value
 
 mcmc.control <- list('nchains'=3,'iter'=4000,'warmup'=2000)
@@ -193,6 +194,38 @@ for (j in 1:n.est){ # loop to look through all methods
 }
 dimnames(est.compare) <- list(c('Linf','K'),c('true',names.est[1:n.est]))
 round(est.compare,4)
+
+
+### // lognormal prior hyperparameters from likely value and upper bound ----
+# rather than using GrowthPriors function, which relies on fishbase, compute
+# lognormal hyperparameter from a given "most likely" value (considered as the 
+# prior median) and a realistic upper bound (used as the prior 0.99 quantile)
+
+hp.Linf <- hp.lognormal(median=120,upper.bound=200,plot=T)
+# ^ most likely value and upper bound, assumed from species knowledge
+hp.Linf
+# ^ lognormal hyperparameters: mean and sd on original (exp) scale, to supply to
+#   Bayesian estimation functions Bfa65, Bfr88, and Bfr88.minIC
+
+hplist2 <- list(hp.Linf, # hyperpar for Linf: lognormal mean and sd (exp scale)
+               c(0,2),   # hyperpar for K: uniform lower and upper bound
+               c(0,50)   # hyperpar for sigma: uniform lower and upper bound
+)
+
+est5.alt <- Bfa65(par=par.ini,L1=L1,L2=L2,deltaT=deltaT,
+                  priordist.Linf='lognormal',
+                  priordist.K='uniform',
+                  priordist.sigma='uniform',
+                  hyperpar=hplist2,
+                  mcmc.control=mcmc.control)
+
+rbind(est5.alt$par, est[[5]]$par)
+# ^ estimates (posterior medians) slightly different because different
+#   hyperparameters for Linf lognormal prior
+
+rbind(est5.alt$cred.int$Linf, est[[5]]$cred.int$Linf)
+# ^ credible intervals for Linf also slightly different
+
 
 
 
