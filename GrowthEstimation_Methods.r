@@ -17,14 +17,15 @@ hp.normal <- function(median, upper.bound, plot=T){
     plot(xgrid,dnorm(xgrid,mean=median,sd=sd),type='l',
          xlab='',ylab='Normal pdf')
     abline(v=median,col='red',lty=2)
-    text(x=median,y=0,labels='median',pos=4,col='red',cex=0.6)
+    text(x=median,y=0,labels=paste0('median = ',median),
+         pos=4,col='red',cex=0.6)
     abline(v=qnorm(c(0.99),mean=median,sd=sd),col='red',lty=2)
-    text(x=qnorm(0.99,mean=median,sd=sd),y=1/sqrt(2*pi)/sd,
-         labels='upper bound = 0.99 quantile',
+    text(x=upper.bound,y=1/sqrt(2*pi)/sd,
+         labels=paste0('upper bound = 0.99 quantile\n= ',upper.bound),
          pos=2,col='red',cex=0.6)
     abline(v=qnorm(0.01,mean=median,sd=sd),lty=2)
     text(x=qnorm(0.01,mean=median,sd=sd),y=1/sqrt(2*pi)/sd,
-         labels=paste0('0.01 quantile ~= ',
+         labels=paste0('0.01 quantile\n~= ',
                        round(qnorm(0.01,mean=median,sd=sd),2)),
          pos=4,cex=0.6)
   }
@@ -48,10 +49,11 @@ hp.lognormal <- function(median, upper.bound, plot=T, interval.sdlog=c(1e-5,5)){
     plot(xgrid,dlnorm(xgrid,meanlog=meanlog,sdlog=sdlog),type='l',
          xlab='',ylab='Lognormal pdf')
     abline(v=median,col='red',lty=2)
-    text(x=median,y=0,labels='median',pos=4,col='red',cex=0.6)
+    text(x=median,y=0,labels=paste0('median = ',median),
+         pos=4,col='red',cex=0.6)
     abline(v=qlnorm(0.99,meanlog=meanlog,sdlog=sdlog),col='red',lty=2)
     text(x=upper.bound,y=1/sqrt(2*pi)/sdlog*exp(sdlog^2/2 - meanlog),
-         labels='upper bound = 0.99 quantile',
+         labels=paste0('upper bound = 0.99 quantile\n= ',upper.bound),
          pos=2,col='red',cex=0.6)
     abline(v=qlnorm(0.01,meanlog=meanlog,sdlog=sdlog),lty=2)
     text(x=qlnorm(0.01,meanlog=meanlog,sdlog=sdlog),
