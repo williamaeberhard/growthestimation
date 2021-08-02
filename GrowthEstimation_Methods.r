@@ -286,7 +286,8 @@ Bfa65 <- function(par,L1,L2,deltaT,
                   hyperpar=NULL,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
-                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
+                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000,
+                                    'adapt_delta'=0.8,'max_treedepth'=20)){
   
   ### setup priors
   
@@ -424,8 +425,11 @@ Bfa65 <- function(par,L1,L2,deltaT,
                         chains=mcmc.control$nchains,
                         warmup=mcmc.control$warmup,
                         iter=mcmc.control$iter,
-                        control=list(adapt_delta=0.99, # def=0.8, larger=safer
-                                     max_treedepth=15), # def=10, larger helps
+                        control=list(adapt_delta=mcmc.control$adapt_delta,
+                                     max_treedepth=mcmc.control$max_treedepth
+                                     # adapt_delta=0.99, # def=0.8, larger=safer
+                                     # max_treedepth=15 # def=10, larger helps
+                        ),
                         # init='random'
                         init='last.par.best' # start from MLE above
     )
@@ -632,7 +636,8 @@ Bfr88 <- function(par,L1,L2,deltaT,
                   varfunc='constant',enablepriorsd=1L,
                   meth='nlminb',compute.se=T,
                   onlyTMB=F,output.post.draws=F,
-                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000)){
+                  mcmc.control=list('nchains'=5,'iter'=20000,'warmup'=10000,
+                                    'adapt_delta'=0.8,'max_treedepth'=20)){
   
   ### setup priors
   
@@ -813,10 +818,11 @@ Bfr88 <- function(par,L1,L2,deltaT,
                         chains=mcmc.control$nchains,
                         warmup=mcmc.control$warmup,
                         iter=mcmc.control$iter,
-                        # control=list(adapt_delta=0.99, # def=0.8, larger=safer
-                        #              max_treedepth=15), # def=10, larger helps
-                        control=list(adapt_delta=0.9, # def=0.8, larger=safer
-                                     max_treedepth=20), # def=10, larger helps
+                        control=list(adapt_delta=mcmc.control$adapt_delta,
+                                     max_treedepth=mcmc.control$max_treedepth
+                        ),
+                        # control=list(adapt_delta=0.9, # def=0.8, larger=safer
+                        #              max_treedepth=20), # def=10, larger helps
                         # init='random'
                         init='last.par.best' # start from MLE above
     )
@@ -1062,7 +1068,8 @@ Bfr88.minIC <- function(par,L1,L2,deltaT,
                         meth='nlminb',compute.se=T,
                         onlyTMB=F,output.post.draws=F,
                         mcmc.control=list('nchains'=5,
-                                          'iter'=20000,'warmup'=10000)){
+                                          'iter'=20000,'warmup'=10000,
+                                          'adapt_delta'=0.8,'max_treedepth'=20)){
   # could be improved by setting compute.se=F for all candidate models and
   # separate se comp without estim
   

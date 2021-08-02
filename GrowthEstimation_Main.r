@@ -145,8 +145,9 @@ plot(seq(0.5,300,0.5),
 abline(v=trueLinf,col='blue')
 # ^ lognormal prior density on Linf and true value
 
-mcmc.control <- list('nchains'=3,'iter'=4000,'warmup'=2000)
-# ^ all should be larger, just for the sake of the demo here.
+mcmc.control <- list('nchains'=3,'iter'=4000,'warmup'=2000,
+                     'adapt_delta'=0.8,'max_treedepth'=20)
+# ^ nchains, iter, and warmup should be larger, just for the sake of the demo
 
 # ## exact von Bertalanffy, no GV or ME
 # L1 <- dat$trueLcap
