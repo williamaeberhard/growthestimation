@@ -64,7 +64,7 @@ hp.lognormal <- function(median, upper.bound, plot=T, interval.sdlog=c(1e-5,5)){
   }
   
   return(c('mean'=exp(meanlog+sdlog^2/2), # expectation ori scale
-           'sd'=sqrt(exp(sdlog^2-1)*exp(2*meanlog+sdlog^2)))) # sd ori scale
+           'sd'=sqrt((exp(sdlog^2)-1)*exp(2*meanlog+sdlog^2)))) # sd ori scale
 }
 
 
