@@ -1,5 +1,5 @@
 #///////////////////////////////////////////////////////////////////////////////
-#### GrowthEstimation v0.4.4 ####
+#### GrowthEstimation v0.4.5 ####
 #///////////////////////////////////////////////////////////////////////////////
 
 
@@ -227,11 +227,12 @@ GrowthPriors <- function(Lmax=133, species="Mustelus asterias",
                     q=Lmax/0.99*lnorm.coef[2], Lmax=Lmax)$root
   
   logn.mean1 <- exp(meanlog1+sdlog1^2/2) # expectation on original scale
-  logn.sd1 <- sqrt(exp(sdlog1^2-1)*exp(2*meanlog1+sdlog1^2)) # sd original scale
-  
+  # logn.sd1 <- sqrt(exp(sdlog1^2-1)*exp(2*meanlog1+sdlog1^2)) # sd original scale <= WRONG
+  logn.sd1 <- sqrt((exp(sdlog1^2)-1)*exp(2*meanlog1+sdlog1^2)) # sd original scale <= CORRECT
+
   logn.mean2 <- exp(meanlog2+sdlog2^2/2) # expectation on original scale
-  logn.sd2 <- sqrt(exp(sdlog2^2-1)*exp(2*meanlog2+sdlog2^2)) # sd original scale
-  
+  # logn.sd2 <- sqrt(exp(sdlog2^2-1)*exp(2*meanlog2+sdlog2^2)) # sd original scale <= WRONG
+  logn.sd2 <- sqrt((exp(sdlog2^2)-1)*exp(2*meanlog2+sdlog2^2)) # sd original scale <= CORRECT
   
   ### Growth performance index phi according to Pauly (slope of -2)
   POP$phi <- log10(POP$K)+2*log10(POP$TLinfinity)
