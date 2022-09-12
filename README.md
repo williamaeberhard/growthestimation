@@ -1,16 +1,17 @@
 GrowthEstimation: R code for various estimation methods of von Bertalanffy growth parameters 
 --------------------------------------------------------------------------------------------
 
-These R scripts provide functions for estimating the von Bertalanffy (vB) growth parameters (Linf and K) from mark-recapture data. These allow to replicate the results in the simulation study of Dureuil et al. (2021+), including the CapRecapSim R function to simulate mark-recapture data under various scenarios.
+These R scripts provide functions for estimating the von Bertalanffy (vB) growth parameters (Linf and K) from mark-recapture data. These allow to replicate the results in the simulation study of Dureuil et al. (2022), including the CapRecapSim R function to simulate mark-recapture data under various scenarios.
 
 
 ### Contents
 
 Files contained in this repository:
-* GrowthEstimation_Main.r: the main R script to run, loading all required libraries, compiling the Template Model Builder (TMB) C++ templates, simulating data and estimating the vB growth parameters according to various methods as in Dureuil et al. (2021+);
+* GrowthEstimation_Main.r: the main R script to run, loading all required libraries, compiling the Template Model Builder (TMB) C++ templates, simulating data and estimating the vB growth parameters according to various methods as in Dureuil et al. (2022);
 * GrowthEstimation_Methods.r: an R script to source to create functions corresponding to all the estimation methods under study;
 * GrowthEstimation_CapRecapSim.r: an R script to source to create the CapRecapSim function which simulates mark-recapture data according to various scenarios;
 * FabensBayesian.cpp, FrancisBayesian.cpp: C++ scripts to compile with the R package TMB, see the Main script;
+* a directory called UserGuide which contains a detailed step-by-step guide (mainly for Windows) in pdf, along with an R script and a csv file serving as an illusrating example;
 * this README file.
 
 
@@ -27,12 +28,12 @@ Changelog v0.4.4:
   - lnorm.sdLinf.narrow: narrow lognormal distribution sd (original scale)
   - lnorm.meanLinf.wide: wide lognormal distribution mean (original scale)
   - lnorm.sdLinf.wide: wide lognormal distribution sd (original scale)
-* Removed all statistical tests (LRT and BF) stuff, since not pertaining to Dureuil et al. (2021+) paper. Thus deleted the following files:
+* Removed all statistical tests (LRT and BF) stuff, since not pertaining to Dureuil et al. (2022) paper. Thus deleted the following files:
   - GrowthEstimation_Tests.r
   - FabensTwoPop.cpp
   - FabensTwoPopBayesian_M0.cpp
   - FabensTwoPopBayesian_M1.cpp
-* Removed methods that are not used in Dureuil et al. (2021+) paper in the end, i.e. la02, Bla02, zh09, and oldfr88. Thus deleted the following files:
+* Removed methods that are not used in Dureuil et al. (2022) paper in the end, i.e. la02, Bla02, zh09, and oldfr88. Thus deleted the following files:
   - Laslett.cpp
   - Zhang.cpp
 
@@ -89,6 +90,4 @@ Changelog v0.2.2:
 
 ### References
 
-Dureuil, M., Aeberhard, W. H., Dowd, M., Froese, R., Pardo, S. A., Whoriskey, F. G., and Worm, B. (2021+) Reliable growth estimation from mark–recapture tagging data in elasmobranchs. In preparation
-
-
+Dureuil, M., Aeberhard, W. H., Dowd, M., Froese, R., Pardo, S. A., Whoriskey, F. G., and Worm, B. (2022) Reliable growth estimation from mark–recapture tagging data in elasmobranchs. Accepted in Fisheries Research
