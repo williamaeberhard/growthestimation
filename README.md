@@ -90,4 +90,4 @@ Changelog v0.2.2:
 
 ### References
 
-Dureuil, M., Aeberhard, W. H., Dowd, M., Froese, R., Pardo, S. A., Whoriskey, F. G., and Worm, B. (2022) Reliable growth estimation from mark–recapture tagging data in elasmobranchs. Accepted in Fisheries Research
+Dureuil, M., Aeberhard, W. H., Dowd, M., Pardo, S. A., Whoriskey, F. G., and Worm, B. (2022) Reliable growth estimation from mark–recapture tagging data in elasmobranchs. Accepted in Fisheries Research
